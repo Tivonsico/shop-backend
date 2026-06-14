@@ -7,6 +7,8 @@ import com.shop.service.GoodsService;
 import com.shop.service.OrderService;
 import com.shop.service.UserService;
 import jakarta.servlet.http.HttpSession;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -191,8 +193,12 @@ public class AdminController {
         }
         String fileName = UUID.randomUUID().toString() + ext;
 
-        // 保存到 uploads 目录
-        String uploadDir = "c:/Users/20463/WeChatProjects/shop-backend/src/main/resources/static/uploads/";
+        // 保存到项目根目录下的 uploads 文件夹（Windows 和 Linux 都兼容）
+        String uploadDir = System.getProperty("user.dir") + "/uploads/";
+        File dir = new File(uploadDir);
+        if (!dir.exists()) {
+            dir.mkdirs();
+        }
         File dest = new File(uploadDir + fileName);
         file.transferTo(dest);
 

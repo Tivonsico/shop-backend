@@ -47,8 +47,9 @@ public class GoodsService {
     /**
      * 保存商品（新增或修改）
      * @CacheEvict = 清空缓存，下次查商品列表时重新查数据库
+     * beforeInvocation = true  = 即使保存失败也先清缓存，保证数据一致性
      */
-    @CacheEvict("goodsList")
+    @CacheEvict(value = "goodsList", allEntries = true, beforeInvocation = true)
     public Goods save(Goods goods) {
         return goodsRepository.save(goods);
     }
@@ -56,7 +57,7 @@ public class GoodsService {
     /**
      * 删除商品
      */
-    @CacheEvict("goodsList")
+    @CacheEvict(value = "goodsList", allEntries = true, beforeInvocation = true)
     public void deleteById(Long id) {
         goodsRepository.deleteById(id);
     }
