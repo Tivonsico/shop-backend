@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户管理 - 天方电竞</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .admin-nav { background: #1a1a2e; }
+        .admin-nav h1 { color: #fff; }
+        .admin-layout { display: flex; }
+        .admin-sidebar { width: 200px; background: #1a1a2e; min-height: calc(100vh - 64px); padding-top: 20px; }
+        .admin-sidebar a { display: block; padding: 14px 24px; color: #b0b0c0; text-decoration: none; font-size: 14px; }
+        .admin-sidebar a:hover, .admin-sidebar a.active { background: rgba(255,255,255,0.08); color: #fff; }
+        .admin-main { flex: 1; padding: 32px; }
+        .page-header { margin-bottom: 24px; }
+        .page-header h2 { font-size: 20px; }
+        .admin-table { width: 100%; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+        .admin-table th { background: #fafafa; padding: 14px 16px; text-align: left; font-size: 13px; color: #666; font-weight: 600; border-bottom: 1px solid #f0f0f0; }
+        .admin-table td { padding: 14px 16px; border-bottom: 1px solid #f5f5f5; font-size: 14px; vertical-align: middle; }
+        .admin-table tr:hover td { background: #fafafa; }
+        .empty-row td { text-align: center; padding: 60px 20px; color: #ccc; }
+        .stat-card { background: #fff; border-radius: 12px; padding: 20px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.06); margin-bottom: 24px; display: inline-block; }
+        .stat-card .num { font-size: 32px; font-weight: 700; color: #ff5f15; }
+        .stat-card .label { font-size: 13px; color: #999; margin-top: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="navbar admin-nav">
+    <div class="navbar-inner">
+        <h1>天方电竞 · 管理后台</h1>
+        <div class="nav-links">
+            <a href="/">返回前台</a>
+            <a href="/admin/logout">退出</a>
+        </div>
+    </div>
+</div>
+
+<div class="admin-layout">
+    <div class="admin-sidebar">
+        <a href="/admin/goods">商品管理</a>
+        <a href="/admin/orders">订单管理</a>
+        <a href="/admin/users" class="active">用户管理</a>
+    </div>
+
+    <div class="admin-main">
+        <div class="page-header">
+            <h2>用户管理</h2>
+            <p style="font-size: 13px; color: #999; margin-top: 4px;">共 <span th:text="${#lists.size(users)}">0</span> 个注册用户</p>
+        </div>
+
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>用户名</th>
+                    <th>手机号</th>
+                    <th>下单总金额</th>
+                    <th>注册时间</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr th:each="user : ${users}">
+                    <td style="font-family: monospace; font-size: 13px;" th:text="${user.id}">1</td>
+                    <td th:text="${user.username}" style="font-weight: 500;">用户名</td>
+                    <td th:text="${user.phone != null ? user.phone : '-'}">138xxxx</td>
+                    <td>
+                        ¥<span th:text="${#numbers.formatDecimal(orderService.getUserTotalSpent(user.id), 0, 2)}">0.00</span>
+                    </td>
+                    <td style="font-size: 13px; color: #999;" th:text="${user.createdAt}">时间</td>
+                </tr>
+                <tr class="empty-row" th:if="${#lists.isEmpty(users)}">
+                    <td colspan="5">暂无注册用户</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+</body>
+</html>

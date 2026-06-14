@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 天方电竞</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="navbar">
+    <div class="navbar-inner">
+        <h1>天方电竞</h1>
+        <div class="nav-links">
+            <a href="/">首页</a>
+            <a href="/register">注册</a>
+        </div>
+    </div>
+</div>
+
+<div class="form-page">
+    <div class="form-card">
+        <h2>登录</h2>
+
+        <!-- 错误提示 -->
+        <div class="error-msg" th:if="${error != null}" th:text="${error}"></div>
+
+        <form method="post" action="/login">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" name="username" required>
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="password" required>
+            </div>
+            <button type="submit" class="btn-submit">登 录</button>
+        </form>
+
+        <div class="form-footer">
+            还没有账号？<a href="/register">立即注册</a>
+        </div>
+
+        <div class="form-footer" style="margin-top: 12px; color: #bbb; font-size: 12px;">
+            测试账号：test / 123456
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

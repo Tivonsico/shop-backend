@@ -1,0 +1,12 @@
+target/
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+.settings/
+.project
+.classpath
+.vscode/
+data/
+shop-backend.iml

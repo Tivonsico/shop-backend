@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理后台 - 登录</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .admin-nav { background: #1a1a2e; }
+        .admin-nav h1 { color: #fff; }
+        .admin-form-card { width: 360px; }
+    </style>
+</head>
+<body>
+
+<div class="navbar admin-nav">
+    <div class="navbar-inner">
+        <h1>天方电竞 · 管理后台</h1>
+        <div class="nav-links">
+            <a href="/">返回前台</a>
+        </div>
+    </div>
+</div>
+
+<div class="form-page">
+    <div class="form-card admin-form-card">
+        <h2>管理员登录</h2>
+
+        <div class="error-msg" th:if="${error != null}" th:text="${error}"></div>
+
+        <form method="post" action="/admin/login">
+            <div class="form-group">
+                <label>管理员账号</label>
+                <input type="text" name="username" value="admin" required>
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="password" value="admin123" required>
+            </div>
+            <button type="submit" class="btn-submit">登 录</button>
+        </form>
+
+        <div class="form-footer" style="color: #bbb; font-size: 12px;">
+            默认账号：admin / admin123
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

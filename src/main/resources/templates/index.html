@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天方电竞 - 首页</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<div class="navbar">
+    <div class="navbar-inner">
+        <h1>天方电竞</h1>
+        <div class="nav-links">
+            <a href="/">首页</a>
+
+            <!-- 如果已登录，显示用户名和订单链接 -->
+            <span th:if="${session.userId != null}" class="username" th:text="${session.username}"></span>
+            <a th:if="${session.userId != null}" href="/orders">我的订单</a>
+            <a th:if="${session.userId != null}" href="/logout">退出</a>
+
+            <!-- 如果未登录，显示登录和注册 -->
+            <a th:if="${session.userId == null}" href="/login">登录</a>
+            <a th:if="${session.userId == null}" href="/register">注册</a>
+        </div>
+    </div>
+</div>
+
+<!-- 商品列表 -->
+<div class="container">
+    <div class="goods-grid">
+        <!-- 循环遍历 goodsList，每个商品生成一张卡片 -->
+        <div class="goods-card" th:each="goods : ${goodsList}">
+            <img th:src="${goods.imageUrl}" th:alt="${goods.name}">
+            <div class="goods-card-body">
+                <h3 th:text="${goods.name}">商品名称</h3>
+                <p th:text="${goods.description}">商品描述</p>
+                <div class="goods-card-footer">
+                    <span class="price" th:text="${#numbers.formatDecimal(goods.price, 0, 2)}">99.00</span>
+                    <a class="btn-link" th:href="@{/goods/{id}(id=${goods.id})}">查看详情</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
