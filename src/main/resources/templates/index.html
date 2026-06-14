@@ -5,6 +5,110 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>天方电竞 - 首页</title>
     <link rel="stylesheet" href="/css/style.css">
+    <style>
+        /* AI 浮动按钮容器 */
+        .ai-float-wrapper {
+            position: fixed;
+            bottom: 120px;
+            right: 32px;
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .ai-float-label {
+            font-size: 12px;
+            color: #ff5f15;
+            font-weight: 600;
+            background: rgba(255,255,255,0.95);
+            padding: 4px 12px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            white-space: nowrap;
+            letter-spacing: 0.5px;
+        }
+        .ai-float-btn {
+            width: 100px;
+            height: 100px;
+            background: #fff;
+            border: none;
+            border-radius: 50%;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none;
+            padding: 0;
+            overflow: hidden;
+        }
+        .ai-float-btn img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+        .ai-float-btn:hover {
+            transform: scale(1.12);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+        }
+        .ai-float-btn:active {
+            transform: scale(0.95);
+        }
+        .ai-login-tip {
+            position: fixed;
+            bottom: 280px;
+            right: 42px;
+            background: #333;
+            color: #fff;
+            padding: 10px 18px;
+            border-radius: 10px;
+            font-size: 13px;
+            white-space: nowrap;
+            z-index: 1000;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s ease;
+            pointer-events: none;
+        }
+        .ai-login-tip::after {
+            content: '';
+            position: absolute;
+            bottom: -6px;
+            right: 50px;
+            width: 12px;
+            height: 12px;
+            background: #333;
+            transform: rotate(45deg);
+        }
+        .ai-login-tip.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        @media (max-width: 768px) {
+            .ai-float-wrapper {
+                width: 68px;
+                bottom: 100px;
+                right: 16px;
+            }
+            .ai-float-btn {
+                width: 80px;
+                height: 80px;
+            }
+            .ai-float-label {
+                font-size: 10px;
+                padding: 2px 8px;
+            }
+            .ai-login-tip {
+                right: 20px;
+                bottom: 200px;
+                font-size: 12px;
+                padding: 8px 14px;
+            }
+        }
+    </style>
 </head>
 <body>
 
@@ -18,6 +122,7 @@
             <!-- 如果已登录，显示用户名和订单链接 -->
             <span th:if="${session.userId != null}" class="username" th:text="${session.username}"></span>
             <a th:if="${session.userId != null}" href="/orders">我的订单</a>
+            <a th:if="${session.userId != null}" href="/ai">AI助手</a>
             <a th:if="${session.userId != null}" href="/logout">退出</a>
 
             <!-- 如果未登录，显示登录和注册 -->
@@ -44,6 +149,31 @@
         </div>
     </div>
 </div>
+
+<!-- AI 浮动按钮 -->
+<div th:if="${session.userId != null}" class="ai-float-wrapper" onclick="location.href='/ai'">
+    <span class="ai-float-label">天方电竞AI小助手</span>
+    <div class="ai-float-btn">
+        <img src="/ai-icon.png" alt="AI">
+    </div>
+</div>
+<div th:if="${session.userId == null}" class="ai-float-wrapper">
+    <span class="ai-float-label">天方电竞AI小助手</span>
+    <div class="ai-float-btn" onclick="showLoginTip()">
+        <img src="/ai-icon.png" alt="AI">
+    </div>
+</div>
+<div class="ai-login-tip" id="aiLoginTip">请先登录才能使用 AI 助手</div>
+
+<script>
+    function showLoginTip() {
+        const tip = document.getElementById('aiLoginTip');
+        tip.classList.add('show');
+        setTimeout(function() {
+            tip.classList.remove('show');
+        }, 2500);
+    }
+</script>
 
 </body>
 </html>

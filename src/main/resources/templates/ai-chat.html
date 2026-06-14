@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 助手 - 天方电竞</title>
+    <link rel="stylesheet" href="/css/style.css">
+    <style>
+        .chat-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 24px 16px;
+            display: flex;
+            flex-direction: column;
+            height: calc(100vh - 180px);
+            min-height: 400px;
+        }
+        .chat-header {
+            text-align: center;
+            margin-bottom: 12px;
+            position: relative;
+        }
+        .chat-header h2 { font-size: 20px; margin: 0 0 4px; }
+        .chat-header p { font-size: 13px; color: #999; margin: 0; }
+        .chat-header .badge {
+            display: inline-block;
+            font-size: 10px;
+            background: #ff5f15;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 8px;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+        .chat-box {
+            flex: 1;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+        .msg {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            line-height: 1.6;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+        .msg.ai {
+            background: #f5f5f5;
+            color: #333;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+        .msg.user {
+            background: #ff5f15;
+            color: #fff;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+        .msg.ai .data-card {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px solid #e8e8e8;
+        }
+        .msg.ai .data-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            padding: 6px 0;
+            color: #555;
+            border-bottom: 1px solid #f5f5f5;
+        }
+        .msg.ai .data-item:last-child { border-bottom: none; }
+        .msg.ai .data-item .label { color: #888; }
+        .chat-input-area {
+            display: flex;
+            gap: 8px;
+        }
+        .chat-input-area input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 24px;
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .chat-input-area input:focus { border-color: #ff5f15; }
+        .chat-send {
+            width: 48px; height: 48px;
+            background: #ff5f15; color: #fff;
+            border: none; border-radius: 50%;
+            font-size: 20px; cursor: pointer;
+            transition: background 0.2s;
+            flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .chat-send:hover { background: #e55010; }
+        .chat-send:disabled { background: #ddd; cursor: not-allowed; }
+        .typing {
+            align-self: flex-start;
+            background: #f5f5f5;
+            padding: 14px 18px;
+            border-radius: 12px;
+            border-bottom-left-radius: 4px;
+            display: none;
+        }
+        .typing span {
+            display: inline-block;
+            width: 7px; height: 7px;
+            background: #bbb;
+            border-radius: 50%;
+            margin: 0 2px;
+            animation: dot 1.4s infinite;
+        }
+        .typing span:nth-child(2) { animation-delay: 0.2s; }
+        .typing span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes dot {
+            0%, 60%, 100% { opacity: 0.3; transform: scale(0.8); }
+            30% { opacity: 1; transform: scale(1); }
+        }
+        .empty-chat {
+            text-align: center;
+            color: #ccc;
+            font-size: 14px;
+            padding: 40px 20px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .empty-chat .icon { font-size: 52px; margin-bottom: 8px; }
+        .empty-chat .hint { font-size: 13px; color: #bbb; margin-top: 12px; }
+        .empty-chat .hint span {
+            display: inline-block;
+            background: #f5f5f5;
+            padding: 6px 16px;
+            border-radius: 16px;
+            margin: 4px;
+            font-size: 13px;
+            color: #888;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .empty-chat .hint span:hover { background: #e8e8e8; color: #555; }
+        .toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 4px;
+        }
+        .btn-clear {
+            font-size: 12px;
+            color: #bbb;
+            background: none;
+            border: 1px solid #eee;
+            border-radius: 12px;
+            padding: 4px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .btn-clear:hover { color: #ff4d4f; border-color: #ff4d4f; }
+        @media (max-width: 768px) {
+            .chat-container { height: calc(100vh - 140px); padding: 12px; }
+            .msg { max-width: 92%; font-size: 13px; padding: 10px 14px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="navbar">
+    <div class="navbar-inner">
+        <h1>天方电竞</h1>
+        <div class="nav-links">
+            <a href="/">首页</a>
+            <span th:if="${session.userId != null}" class="username" th:text="${session.username}"></span>
+            <a th:if="${session.userId != null}" href="/orders">我的订单</a>
+            <a th:if="${session.userId != null}" href="/ai">AI助手</a>
+            <a th:if="${session.userId != null}" href="/logout">退出</a>
+            <a th:if="${session.userId == null}" href="/login">登录</a>
+        </div>
+    </div>
+</div>
+
+<div class="chat-container">
+
+    <div class="chat-header">
+        <h2>🤖 天方电竞 AI <span class="badge">Agent</span></h2>
+        <p>有记忆、能查数据库、连续对话</p>
+    </div>
+
+    <div class="toolbar">
+        <button class="btn-clear" onclick="clearMemory()">🗑 清空记忆</button>
+    </div>
+
+    <div class="chat-box" id="chatBox">
+        <div class="empty-chat" id="emptyChat">
+            <div class="icon">💬</div>
+            <div>有什么可以帮您的？</div>
+            <div class="hint">
+                试试问：
+                <br>
+                <span onclick="sendQuick('有什么商品')">📦 有什么商品</span>
+                <span onclick="sendQuick('我的订单')">📋 我的订单</span>
+                <span onclick="sendQuick('帮助')">❓ 帮助</span>
+            </div>
+        </div>
+        <div class="typing" id="typing"><span></span><span></span><span></span></div>
+    </div>
+
+    <div class="chat-input-area">
+        <input type="text" id="chatInput" placeholder="输入消息（支持连续对话）..." onkeydown="if(event.key==='Enter') sendMsg()">
+        <button class="chat-send" id="sendBtn" onclick="sendMsg()">➤</button>
+    </div>
+</div>
+
+<script>
+    const chatBox = document.getElementById('chatBox');
+    const emptyChat = document.getElementById('emptyChat');
+    const typing = document.getElementById('typing');
+    const input = document.getElementById('chatInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    function appendMsg(content, role) {
+        emptyChat.style.display = 'none';
+        const div = document.createElement('div');
+        div.className = 'msg ' + role;
+        div.textContent = content;
+        chatBox.insertBefore(div, typing);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function appendData(data, intent) {
+        const div = document.querySelector('.msg.ai:last-of-type');
+        if (!div || !data || data.length === 0) return;
+
+        const card = document.createElement('div');
+        card.className = 'data-card';
+
+        data.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'data-item';
+            if (intent === 'order_query') {
+                row.innerHTML = '<span class="label">' + (item.goodsName || '商品') + ' ×' + item.count + '</span>' +
+                    '<span>¥' + (item.totalPrice || 0).toFixed(2) + '</span>';
+            } else {
+                row.innerHTML = '<span class="label">' + (item.name || '商品') + '</span>' +
+                    '<span>¥' + (item.price || 0).toFixed(2) + '（库存' + (item.stock || 0) + '）</span>';
+            }
+            card.appendChild(row);
+        });
+        if (card.children.length > 0) div.appendChild(card);
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function sendQuick(text) {
+        input.value = text;
+        sendMsg();
+    }
+
+    async function sendMsg() {
+        const msg = input.value.trim();
+        if (!msg) return;
+
+        appendMsg(msg, 'user');
+        input.value = '';
+        sendBtn.disabled = true;
+        typing.style.display = 'flex';
+
+        try {
+            const res = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: msg })
+            });
+            const result = await res.json();
+            typing.style.display = 'none';
+            appendMsg(result.reply || '抱歉，我没有理解', 'ai');
+            if (result.data && result.data.length > 0) {
+                appendData(result.data, result.intent);
+            }
+        } catch (e) {
+            typing.style.display = 'none';
+            appendMsg('网络出错了，请稍后再试', 'ai');
+        } finally {
+            sendBtn.disabled = false;
+        }
+    }
+
+    async function clearMemory() {
+        await fetch('/api/ai/clear', { method: 'POST' });
+        // 清除页面上的消息，只保留 emptyChat
+        document.querySelectorAll('.msg').forEach(el => el.remove());
+        emptyChat.style.display = 'flex';
+        chatBox.scrollTop = 0;
+    }
+</script>
+
+</body>
+</html>
