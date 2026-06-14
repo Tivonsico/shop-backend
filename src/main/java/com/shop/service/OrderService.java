@@ -28,6 +28,10 @@ public class OrderService {
      * @return 如果商品不存在或库存不足，返回 null
      */
     public Order createOrder(Long userId, Long goodsId, Integer count) {
+        // 0. 限制单次最多购买 100 个
+        if (count > 100) count = 100;
+        if (count < 1) return null;
+
         // 1. 检查商品是否存在
         Optional<Goods> goodsOpt = goodsService.findById(goodsId);
         if (goodsOpt.isEmpty()) {

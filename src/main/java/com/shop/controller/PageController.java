@@ -14,12 +14,6 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Optional;
 
-/**
- * 页面控制器
- *
- * @Controller = 返回网页（不是 JSON）
- * 这里的每个方法返回一个 HTML 页面
- */
 @Controller
 public class PageController {
 
@@ -33,9 +27,6 @@ public class PageController {
         this.userService = userService;
     }
 
-    /**
-     * 首页：显示所有商品
-     */
     @GetMapping("/")
     public String index(Model model) {
         List<Goods> goodsList = goodsService.getAllGoods();
@@ -43,17 +34,11 @@ public class PageController {
         return "index";
     }
 
-    /**
-     * 登录页
-     */
     @GetMapping("/login")
     public String loginPage() {
         return "login";
     }
 
-    /**
-     * 处理登录
-     */
     @PostMapping("/login")
     public String login(@RequestParam String username,
                         @RequestParam String password,
@@ -69,17 +54,11 @@ public class PageController {
         return "redirect:/";
     }
 
-    /**
-     * 注册页
-     */
     @GetMapping("/register")
     public String registerPage() {
         return "register";
     }
 
-    /**
-     * 处理注册
-     */
     @PostMapping("/register")
     public String register(@RequestParam String username,
                            @RequestParam String password,
@@ -93,31 +72,27 @@ public class PageController {
         return "redirect:/login";
     }
 
-    /**
-     * 退出登录
-     */
     @GetMapping("/logout")
     public String logout(HttpSession session) {
         session.invalidate();
         return "redirect:/";
     }
 
-    /**
-     * 商品详情页
-     */
     @GetMapping("/goods/{id}")
-    public String goodsDetail(@PathVariable Long id, Model model) {
+    public String goodsDetail(@PathVariable Long id,
+                              @RequestParam(required = false) String error,
+                              Model model) {
         Optional<Goods> goods = goodsService.findById(id);
         if (goods.isEmpty()) {
             return "redirect:/";
         }
         model.addAttribute("goods", goods.get());
+        if ("stock".equals(error)) {
+            model.addAttribute("error", "库存不足，当前库存仅 " + goods.get().getStock() + " 件");
+        }
         return "goods-detail";
     }
 
-    /**
-     * 我的订单页
-     */
     @GetMapping("/orders")
     public String orders(HttpSession session, Model model) {
         Long userId = (Long) session.getAttribute("userId");
@@ -125,33 +100,23 @@ public class PageController {
             return "redirect:/login";
         }
         List<Order> orderList = orderService.findByUserId(userId);
-        // 把商品信息也查出来，展示用
         model.addAttribute("orderList", orderList);
         model.addAttribute("goodsService", goodsService);
         return "orders";
     }
 
-    /**
-     * 下单处理
-     */
     @PostMapping("/order/create")
     public String createOrder(@RequestParam Long goodsId,
                               @RequestParam Integer count,
-                              HttpSession session,
-                              Model model) {
+                              HttpSession session) {
         Long userId = (Long) session.getAttribute("userId");
         if (userId == null) {
             return "redirect:/login";
         }
-
         Order order = orderService.createOrder(userId, goodsId, count);
         if (order == null) {
-            model.addAttribute("error", "商品不存在或库存不足");
-            Optional<Goods> goods = goodsService.findById(goodsId);
-            goods.ifPresent(g -> model.addAttribute("goods", g));
-            return "goods-detail";
+            return "redirect:/goods/" + goodsId + "?error=stock";
         }
-
         return "redirect:/orders";
     }
 }

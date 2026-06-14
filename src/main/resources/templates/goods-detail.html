@@ -111,6 +111,36 @@
         .btn-buy:hover {
             background: #e55010;
         }
+
+        /* 数量输入限制 */
+        .count-wrap {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .count-wrap input {
+            width: 80px;
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .count-wrap input.count-error {
+            border-color: #ff4d4f;
+            box-shadow: 0 0 0 2px rgba(255,77,79,0.15);
+        }
+        .count-tip {
+            font-size: 12px;
+            color: #ff4d4f;
+            display: none;
+            white-space: nowrap;
+        }
+        .count-tip.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -148,7 +178,10 @@
                 <input type="hidden" id="goodsId" th:value="${goods.id}">
                 <input type="hidden" id="goodsPrice" th:value="${goods.price}">
                 <label>购买数量：</label>
-                <input type="number" id="buyCount" value="1" min="1" th:max="${goods.stock}">
+                <div class="count-wrap">
+                    <input type="number" id="buyCount" value="1" min="1" max="100" th:max="${goods.stock}" oninput="checkCount(this)">
+                    <div class="count-tip" id="countTip">最多一次性购买 100 个</div>
+                </div>
                 <button type="button" class="btn-buy" onclick="showPayModal()">
                     立即购买
                 </button>
@@ -192,8 +225,26 @@
 </div>
 
 <script>
+    function checkCount(input) {
+        const tip = document.getElementById('countTip');
+        let val = parseInt(input.value) || 0;
+        if (val > 100) {
+            input.classList.add('count-error');
+            tip.classList.add('show');
+            input.value = 100;
+        } else {
+            input.classList.remove('count-error');
+            tip.classList.remove('show');
+        }
+    }
+
     function showPayModal() {
-        const count = parseInt(document.getElementById('buyCount').value) || 1;
+        let count = parseInt(document.getElementById('buyCount').value) || 1;
+        if (count > 100) count = 100;
+        if (count < 1) count = 1;
+        document.getElementById('buyCount').value = count;
+        document.getElementById('countTip').classList.remove('show');
+        document.getElementById('buyCount').classList.remove('count-error');
         const price = parseFloat(document.getElementById('goodsPrice').value) || 0;
         const total = (count * price).toFixed(2);
 
