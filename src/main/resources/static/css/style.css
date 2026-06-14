@@ -363,3 +363,119 @@ body {
     border: 1px solid #b7eb8f;
     text-align: center;
 }
+
+/* ===== 移动端适配 ===== */
+@media (max-width: 768px) {
+    .container {
+        padding: 16px 12px;
+    }
+
+    .navbar {
+        padding: 0 12px;
+    }
+
+    /* 首页商品网格：一列两个 */
+    .goods-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+
+    .goods-card img {
+        height: 160px;
+    }
+
+    .goods-card-body {
+        padding: 10px;
+    }
+
+    .goods-card-body h3 {
+        font-size: 13px;
+    }
+
+    .goods-card-body p {
+        display: none;
+    }
+
+    .price {
+        font-size: 18px;
+    }
+
+    .btn-link {
+        padding: 6px 14px;
+        font-size: 12px;
+    }
+
+    /* 商品详情页：竖排 */
+    .goods-detail {
+        flex-direction: column;
+        padding: 16px;
+        gap: 16px;
+    }
+
+    .goods-detail img {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 1;
+    }
+
+    .goods-detail-info h2 {
+        font-size: 20px;
+    }
+
+    .goods-detail-info .price-big {
+        font-size: 26px;
+    }
+
+    /* 订单卡片：紧凑 */
+    .order-card {
+        padding: 14px 16px;
+    }
+
+    .order-card-left img {
+        width: 60px;
+        height: 60px;
+    }
+
+    .order-card-left {
+        gap: 10px;
+    }
+
+    /* 表单卡片：满宽 */
+    .form-card {
+        width: 100%;
+        padding: 24px 20px;
+    }
+
+    /* 管理后台侧边栏：折叠到顶部 */
+    .admin-layout {
+        flex-direction: column;
+    }
+
+    .admin-sidebar {
+        width: 100%;
+        min-height: auto;
+        display: flex;
+        padding: 0;
+        overflow-x: auto;
+    }
+
+    .admin-sidebar a {
+        white-space: nowrap;
+        padding: 12px 16px;
+        font-size: 13px;
+    }
+
+    .admin-main {
+        padding: 16px 12px;
+    }
+
+    /* 表格：横向滚动 */
+    .admin-table {
+        font-size: 13px;
+    }
+
+    .admin-table th,
+    .admin-table td {
+        padding: 10px 12px;
+    }
+}
