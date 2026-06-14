@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title th:text="${goods != null ? '编辑商品' : '添加商品'} + ' - 管理后台'">商品表单</title>
+    <title>商品表单 - 管理后台</title>
     <link rel="stylesheet" href="/css/style.css">
     <style>
         .admin-nav { background: #1a1a2e; }
@@ -32,13 +32,14 @@
     <div class="admin-sidebar">
         <a href="/admin/goods" class="active">商品管理</a>
         <a href="/admin/orders">订单管理</a>
+        <a href="/admin/users">用户管理</a>
     </div>
 
     <div class="admin-main">
-        <h2 style="font-size: 20px; margin-bottom: 24px;" th:text="${goods != null ? '编辑商品' : '添加商品'}">编辑商品</h2>
+        <h2 style="font-size: 20px; margin-bottom: 24px;" th:text="${isEdit ? '编辑商品' : '添加商品'}">编辑商品</h2>
 
         <div class="form-card" style="width: 100%; padding: 32px;">
-            <form method="post" th:action="${goods != null ? @{/admin/goods/edit/{id}(id=${goods.id})} : '/admin/goods/add'}" enctype="multipart/form-data">
+            <form method="post" th:action="${actionUrl}" enctype="multipart/form-data">
                 <div class="form-group">
                     <label>商品名称</label>
                     <input type="text" name="name" th:value="${goods?.name}" required>
@@ -60,10 +61,10 @@
                     <input type="file" name="imageFile" accept="image/*">
                     <div th:if="${goods?.imageUrl != null}" style="margin-top: 8px;">
                         <p style="font-size: 12px; color: #999; margin-bottom: 4px;">当前图片：</p>
-                        <img class="preview-img" th:src="${goods.imageUrl}">
+                        <img class="preview-img" th:src="${goods?.imageUrl}">
                     </div>
                 </div>
-                <button type="submit" class="btn-submit" style="margin-top: 8px;" th:text="${goods != null ? '保存修改' : '添加商品'}">保存</button>
+                <button type="submit" class="btn-submit" style="margin-top: 8px;" th:text="${isEdit ? '保存修改' : '添加商品'}">保存</button>
             </form>
         </div>
     </div>

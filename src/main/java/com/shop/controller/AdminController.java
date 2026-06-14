@@ -20,15 +20,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * 管理后台控制器
- *
- * 访问方式：浏览器打开 http://localhost:8080/admin/login
- * 管理员账号：admin / admin123
- */
 @Controller
 @RequestMapping("/admin")
 public class AdminController {
+
+    private static final Logger log = LoggerFactory.getLogger(AdminController.class);
 
     private final GoodsService goodsService;
     private final OrderService orderService;
@@ -80,8 +76,10 @@ public class AdminController {
     }
 
     @GetMapping("/goods/add")
-    public String goodsAddPage(HttpSession session) {
+    public String goodsAddPage(HttpSession session, Model model) {
         if (!isAdmin(session)) return "redirect:/admin/login";
+        model.addAttribute("isEdit", false);
+        model.addAttribute("actionUrl", "/admin/goods/add");
         return "admin/goods-form";
     }
 
@@ -91,24 +89,27 @@ public class AdminController {
                            @RequestParam Double price,
                            @RequestParam Integer stock,
                            @RequestParam(required = false) MultipartFile imageFile,
-                           HttpSession session) throws IOException {
+                           HttpSession session) {
         if (!isAdmin(session)) return "redirect:/admin/login";
 
-        Goods goods = new Goods();
-        goods.setName(name);
-        goods.setDescription(description);
-        goods.setPrice(price);
-        goods.setStock(stock);
+        try {
+            Goods goods = new Goods();
+            goods.setName(name);
+            goods.setDescription(description);
+            goods.setPrice(price);
+            goods.setStock(stock);
 
-        // 处理图片上传
-        if (imageFile != null && !imageFile.isEmpty()) {
-            String fileName = saveImage(imageFile);
-            goods.setImageUrl("/uploads/" + fileName);
-        } else {
-            goods.setImageUrl("https://qcloudimg.tencent-cloud.cn/raw/063123361b3a397f4ba6894591c3a006.png");
+            if (imageFile != null && !imageFile.isEmpty()) {
+                String fileName = saveImage(imageFile);
+                goods.setImageUrl("/uploads/" + fileName);
+            } else {
+                goods.setImageUrl("https://qcloudimg.tencent-cloud.cn/raw/063123361b3a397f4ba6894591c3a006.png");
+            }
+
+            goodsService.save(goods);
+        } catch (Exception e) {
+            log.error("添加商品失败", e);
         }
-
-        goodsService.save(goods);
         return "redirect:/admin/goods";
     }
 
@@ -118,6 +119,8 @@ public class AdminController {
         Optional<Goods> goods = goodsService.findById(id);
         if (goods.isEmpty()) return "redirect:/admin/goods";
         model.addAttribute("goods", goods.get());
+        model.addAttribute("isEdit", true);
+        model.addAttribute("actionUrl", "/admin/goods/edit/" + id);
         return "admin/goods-form";
     }
 
@@ -128,24 +131,28 @@ public class AdminController {
                             @RequestParam Double price,
                             @RequestParam Integer stock,
                             @RequestParam(required = false) MultipartFile imageFile,
-                            HttpSession session) throws IOException {
+                            HttpSession session) {
         if (!isAdmin(session)) return "redirect:/admin/login";
 
-        Optional<Goods> goodsOpt = goodsService.findById(id);
-        if (goodsOpt.isEmpty()) return "redirect:/admin/goods";
+        try {
+            Optional<Goods> goodsOpt = goodsService.findById(id);
+            if (goodsOpt.isEmpty()) return "redirect:/admin/goods";
 
-        Goods goods = goodsOpt.get();
-        goods.setName(name);
-        goods.setDescription(description);
-        goods.setPrice(price);
-        goods.setStock(stock);
+            Goods g = goodsOpt.get();
+            g.setName(name);
+            g.setDescription(description);
+            g.setPrice(price);
+            g.setStock(stock);
 
-        if (imageFile != null && !imageFile.isEmpty()) {
-            String fileName = saveImage(imageFile);
-            goods.setImageUrl("/uploads/" + fileName);
+            if (imageFile != null && !imageFile.isEmpty()) {
+                String fileName = saveImage(imageFile);
+                g.setImageUrl("/uploads/" + fileName);
+            }
+
+            goodsService.save(g);
+        } catch (Exception e) {
+            log.error("编辑商品失败", e);
         }
-
-        goodsService.save(goods);
         return "redirect:/admin/goods";
     }
 
@@ -185,7 +192,6 @@ public class AdminController {
     }
 
     private String saveImage(MultipartFile file) throws IOException {
-        // 生成唯一文件名
         String originalName = file.getOriginalFilename();
         String ext = "";
         if (originalName != null && originalName.contains(".")) {
@@ -193,7 +199,6 @@ public class AdminController {
         }
         String fileName = UUID.randomUUID().toString() + ext;
 
-        // 保存到项目根目录下的 uploads 文件夹（Windows 和 Linux 都兼容）
         String uploadDir = System.getProperty("user.dir") + "/uploads/";
         File dir = new File(uploadDir);
         if (!dir.exists()) {
