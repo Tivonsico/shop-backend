@@ -6,8 +6,6 @@ import com.shop.service.GoodsService;
 import com.shop.service.OrderService;
 import org.springframework.stereotype.Service;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -40,7 +38,6 @@ public class AgentService {
     private final GoodsService goodsService;
     private final OrderService orderService;
     private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
 
     // 优先读环境变量（Railway部署用），没有就读系统属性（本地开发用）
     private static final String API_KEY = System.getenv("DEEPSEEK_API_KEY") != null
@@ -73,7 +70,6 @@ public class AgentService {
         this.goodsService = goodsService;
         this.orderService = orderService;
         this.httpClient = HttpClient.newHttpClient();
-        this.objectMapper = new ObjectMapper();
     }
 
     /**
@@ -227,16 +223,45 @@ public class AgentService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-        // 用 Jackson 正确解析 JSON
-        JsonNode root = objectMapper.readTree(response.body());
-        JsonNode choices = root.get("choices");
-        if (choices != null && choices.isArray() && choices.size() > 0) {
-            JsonNode message = choices.get(0).get("message");
-            if (message != null && message.get("content") != null) {
-                return message.get("content").asText();
+        // 用简单字符串解析替代 Jackson（避免编译依赖问题）
+        String body = response.body();
+        // 找一个 "content":"..." 提取回复内容
+        String marker = "\"content\":\"";
+        int start = body.indexOf(marker);
+        if (start >= 0) {
+            start += marker.length();
+            StringBuilder content = new StringBuilder();
+            for (int i = start; i < body.length(); i++) {
+                char c = body.charAt(i);
+                if (c == '\\') {
+                    // 处理转义
+                    if (i + 1 < body.length()) {
+                        char next = body.charAt(i + 1);
+                        if (next == '"') { content.append('"'); i++; }
+                        else if (next == 'n') { content.append('\n'); i++; }
+                        else if (next == '\\') { content.append('\\'); i++; }
+                        else { content.append(c); }
+                    }
+                } else if (c == '"') {
+                    // content 结束
+                    return content.toString();
+                } else {
+                    content.append(c);
+                }
             }
         }
         return null;
+    }
+
+    /**
+     * JSON 字符串转义（确保能正确嵌入到 JSON 字符串中）
+     */
+    private String JSONStringEscape(String s) {
+        return "\"" + s.replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "\\r")
+                .replace("\t", "\\t") + "\"";
     }
 
     // ==================== 关键词模式（增强版）====================
