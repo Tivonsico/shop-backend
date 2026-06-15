@@ -6,6 +6,8 @@ import com.shop.service.GoodsService;
 import com.shop.service.OrderService;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -38,12 +40,16 @@ public class AgentService {
     private final GoodsService goodsService;
     private final OrderService orderService;
     private final HttpClient httpClient;
+    private final ObjectMapper objectMapper;
 
     // 优先读环境变量（Railway部署用），没有就读系统属性（本地开发用）
     private static final String API_KEY = System.getenv("DEEPSEEK_API_KEY") != null
             ? System.getenv("DEEPSEEK_API_KEY")
             : System.getProperty("DEEPSEEK_API_KEY", "");
     private static final boolean USE_LLM = !API_KEY.isEmpty() && !API_KEY.equals("sk-your-key-here");
+
+    // DeepSeek API 地址
+    private static final String DEEPSEEK_URL = "https://api.deepseek.com/chat/completions";
 
     // 近义词表，增强意图识别
     private static final Map<String, List<String>> INTENT_KEYWORDS = new LinkedHashMap<>();
@@ -67,10 +73,16 @@ public class AgentService {
         this.goodsService = goodsService;
         this.orderService = orderService;
         this.httpClient = HttpClient.newHttpClient();
+        this.objectMapper = new ObjectMapper();
     }
 
     /**
      * Agent 主入口
+     *
+     * 1. 保存用户消息到记忆
+     * 2. 识别意图（用 LLM 或关键词）
+     * 3. 调用对应工具
+     * 4. 保存回复到记忆
      */
     public Map<String, Object> process(String message, Long userId) {
         AgentMemory.addMessage(userId, "user", message);
@@ -87,87 +99,144 @@ public class AgentService {
         return result;
     }
 
-    // ==================== LLM 模式（调用 DeepSeek API）====================
+    // ==================== LLM 模式（调用 DeepSeek API — 真正智能对话）====================
 
     private Map<String, Object> processWithLLM(String message, Long userId) {
         try {
-            String context = buildLLMContext(userId);
-            String prompt = "你是天方电竞商城的 AI 助手。你擅长查询用户的订单信息、商品信息。\n\n"
-                    + context
-                    + "\n\n用户最新消息：" + message
-                    + "\n\n请根据对话历史和用户消息，判断用户想做什么，然后从以下工具中选择一个执行：\n"
-                    + "1. query_orders — 查询我的订单\n"
-                    + "2. query_goods — 查询商品信息\n"
-                    + "3. query_goods_detail — 查询某个商品的详细信息\n"
-                    + "4. help — 帮助信息\n\n"
-                    + "请只回复工具名称和参数，格式：工具名|参数（没有参数填无）";
+            // 1. 先用工具函数查出真实数据备着
+            List<Order> orders = orderService.findByUserId(userId);
+            List<Goods> allGoods = goodsService.getAllGoods();
 
-            String llmReply = callDeepSeek(prompt);
+            // 2. 构建系统提示词，包含真实数据
+            StringBuilder sysPrompt = new StringBuilder();
+            sysPrompt.append("你是「天方电竞」商城的 AI 助手，你叫小天。").append("\n");
+            sysPrompt.append("你的回复要热情友好，带点幽默感，用年轻人的语气。").append("\n");
+            sysPrompt.append("所有商品和订单信息必须基于下面给你的数据，不要瞎编。").append("\n\n");
 
-            if (llmReply.contains("query_orders")) return executeQueryOrders(userId);
-            if (llmReply.contains("query_goods")) return executeQueryGoods(message);
-            if (llmReply.contains("query_goods_detail")) return executeQueryGoodsDetail(message);
-            if (llmReply.contains("help")) return executeHelp();
+            // 写入商品数据
+            sysPrompt.append("【商城当前商品】").append("\n");
+            for (Goods g : allGoods) {
+                sysPrompt.append("- ").append(g.getName())
+                        .append(" | 价格：¥").append(String.format("%.2f", g.getPrice()))
+                        .append(" | 库存：").append(g.getStock())
+                        .append(" | 描述：").append(g.getDescription() != null ? g.getDescription() : "无").append("\n");
+            }
+            sysPrompt.append("\n");
 
-            return executeUnknown();
+            // 写入订单数据
+            if (!orders.isEmpty()) {
+                sysPrompt.append("【用户订单】共 ").append(orders.size()).append(" 笔：").append("\n");
+                double total = orders.stream().mapToDouble(Order::getTotalPrice).sum();
+                for (Order o : orders) {
+                    String goodsName = goodsService.findById(o.getGoodsId())
+                            .map(Goods::getName).orElse("未知");
+                    sysPrompt.append("- ").append(goodsName)
+                            .append(" × ").append(o.getCount())
+                            .append(" = ¥").append(String.format("%.2f", o.getTotalPrice()))
+                            .append(" | ").append(o.getCreatedAt() != null ? o.getCreatedAt().toString().substring(0, 10) : "未知").append("\n");
+                }
+                sysPrompt.append("累计消费：¥").append(String.format("%.2f", total)).append("\n");
+            } else {
+                sysPrompt.append("【用户订单】该用户还没有下过单。").append("\n");
+            }
+            sysPrompt.append("\n");
+
+            // 写入客服等固定信息
+            sysPrompt.append("【固定信息】").append("\n");
+            sysPrompt.append("- 客服微信：15251889707").append("\n");
+            sysPrompt.append("- 管理后台：/admin/login （管理员账号 15251889707）").append("\n");
+            sysPrompt.append("- 运费：全场包邮").append("\n");
+
+            // 3. 构建对话历史 + 最新消息
+            StringBuilder messagesBody = new StringBuilder();
+            // 先把系统消息放进去
+            messagesBody.append("{\"role\":\"system\",\"content\":").append(JSONStringEscape(sysPrompt.toString())).append("}");
+
+            // 把最近几轮对话历史加进去（最多最近3轮）
+            List<Map<String, String>> history = AgentMemory.getHistory(userId);
+            int startIdx = Math.max(0, history.size() - 6); // 最近3轮（user+assistant各一）
+            for (int i = startIdx; i < history.size() - 1; i++) { // 排除最后一条（刚存进去的用户消息）
+                Map<String, String> m = history.get(i);
+                messagesBody.append(",{\"role\":\"").append(m.get("role")).append("\",\"content\":")
+                        .append(JSONStringEscape(m.get("content"))).append("}");
+            }
+            // 当前用户消息
+            messagesBody.append(",{\"role\":\"user\",\"content\":").append(JSONStringEscape(message)).append("}");
+
+            // 4. 调用 DeepSeek
+            String reply = callDeepSeek(messagesBody.toString());
+            if (reply == null || reply.isEmpty()) {
+                // LLM 挂了降级到关键词
+                return processWithKeywords(message, userId);
+            }
+
+            // 5. 看看 LLM 的回复需要附带结构化数据吗（关键词检测 + 工具函数）
+            Map<String, Object> result = new HashMap<>();
+            result.put("reply", reply);
+            result.put("intent", "chat");
+
+            // 判断是否需要附加商品/订单数据
+            String lowerReply = reply.toLowerCase();
+            String lowerMsg = message.toLowerCase();
+
+            // 用户明确问商品或订单时，附上数据方便前端渲染
+            if (lowerMsg.contains("订单") || lowerMsg.contains("买了") || lowerMsg.contains("买过")
+                    || lowerMsg.contains("消费") || lowerMsg.contains("花了")) {
+                Map<String, Object> orderResult = executeQueryOrders(userId);
+                result.put("data", orderResult.get("data"));
+                result.put("intent", "order_query");
+            } else if (lowerMsg.contains("商品") || lowerMsg.contains("有什么") || lowerMsg.contains("推荐")
+                    || lowerMsg.contains("热销") || lowerMsg.contains("卖")) {
+                Map<String, Object> goodsResult = executeQueryGoods(message);
+                result.put("data", goodsResult.get("data"));
+                result.put("intent", "goods_query");
+            } else {
+                // 尝试模糊匹配商品名
+                for (Goods g : allGoods) {
+                    if (lowerMsg.contains(g.getName().toLowerCase())
+                            || g.getName().toLowerCase().contains(lowerMsg)) {
+                        Map<String, Object> goodsResult = executeQueryGoods(message);
+                        result.put("data", goodsResult.get("data"));
+                        result.put("intent", "goods_query");
+                        break;
+                    }
+                }
+            }
+
+            return result;
 
         } catch (Exception e) {
+            // LLM 调用失败，降级到关键词模式
             return processWithKeywords(message, userId);
         }
     }
 
-    private String buildLLMContext(Long userId) {
-        String history = AgentMemory.getContext(userId);
-        List<Order> orders = orderService.findByUserId(userId);
-        List<Goods> goods = goodsService.getAllGoods();
-
-        StringBuilder sb = new StringBuilder();
-        sb.append(history).append("\n");
-        sb.append("系统信息：\n");
-        sb.append("用户有 ").append(orders.size()).append(" 笔订单\n");
-        sb.append("商城共有 ").append(goods.size()).append(" 件商品\n");
-
-        if (!orders.isEmpty()) {
-            sb.append("最近订单：");
-            Order last = orders.get(orders.size() - 1);
-            goodsService.findById(last.getGoodsId()).ifPresent(g ->
-                    sb.append(g.getName()).append(" × ").append(last.getCount())
-            );
-            sb.append("\n");
-        }
-        return sb.toString();
-    }
-
-    private String callDeepSeek(String prompt) throws Exception {
-        String json = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":"
-                + JSONStringEscape(prompt) + "}],\"max_tokens\":100}";
+    /**
+     * 调用 DeepSeek API，返回 AI 回复文本
+     */
+    private String callDeepSeek(String messagesJson) throws Exception {
+        String json = "{\"model\":\"deepseek-chat\",\"messages\":[" + messagesJson + "],\"max_tokens\":500}";
 
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create("https://api.deepseek.com/v1/chat/completions"))
+                .uri(URI.create(DEEPSEEK_URL))
                 .header("Authorization", "Bearer " + API_KEY)
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(json))
-                .timeout(java.time.Duration.ofSeconds(10))
+                .timeout(java.time.Duration.ofSeconds(15))
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        String body = response.body();
-        if (body.contains("\"content\":\"")) {
-            int start = body.indexOf("\"content\":\"") + 11;
-            int end = body.indexOf("\"", start);
-            if (start > 10 && end > start) {
-                return body.substring(start, end);
+
+        // 用 Jackson 正确解析 JSON
+        JsonNode root = objectMapper.readTree(response.body());
+        JsonNode choices = root.get("choices");
+        if (choices != null && choices.isArray() && choices.size() > 0) {
+            JsonNode message = choices.get(0).get("message");
+            if (message != null && message.get("content") != null) {
+                return message.get("content").asText();
             }
         }
-        return "";
-    }
-
-    private String JSONStringEscape(String s) {
-        return s.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+        return null;
     }
 
     // ==================== 关键词模式（增强版）====================
