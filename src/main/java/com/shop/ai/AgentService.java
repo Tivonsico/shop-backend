@@ -10,11 +10,12 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.LocalTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
 /**
- * AI Agent 服务
+ * AI Agent 服务 — 增强版
  *
  * 架构（面试可以讲这个）：
  *   1. 记忆层（Memory）— 存对话历史
@@ -22,8 +23,14 @@ import java.util.stream.Collectors;
  *   3. 工具层（Tools）— 实际执行数据库查询等操作
  *   4. 生成层（Response）— 组装最终回复
  *
- * 如果配置了 DEEPSEEK_API_KEY，会用真实大模型理解语义；
- * 没有的话用增强关键词匹配兜底。
+ * 增强功能：
+ *   - 时间感知问候
+ *   - 价格区间查询
+ *   - 商品推荐
+ *   - 模糊商品名匹配
+ *   - 订单统计
+ *   - 多轮对话上下文保持
+ *   - 客服联系信息
  */
 @Service
 public class AgentService {
@@ -32,11 +39,26 @@ public class AgentService {
     private final OrderService orderService;
     private final HttpClient httpClient;
 
-    // 从环境变量读取 DeepSeek API Key（可选）
-    // 设置方式：System.setProperty("DEEPSEEK_API_KEY", "sk-xxx")
-    // 或者在 IDEA 运行配置的 VM Options 加 -D DEEPSEEK_API_KEY=sk-xxx
     private static final String API_KEY = System.getProperty("DEEPSEEK_API_KEY", "");
     private static final boolean USE_LLM = !API_KEY.isEmpty() && !API_KEY.equals("sk-your-key-here");
+
+    // 近义词表，增强意图识别
+    private static final Map<String, List<String>> INTENT_KEYWORDS = new LinkedHashMap<>();
+    static {
+        INTENT_KEYWORDS.put("greet", List.of("你好", "嗨", "hi", "hello", "在吗", "早", "晚上好", "下午好"));
+        INTENT_KEYWORDS.put("order", List.of("订单", "买了", "买过", "消费", "下单", "购买记录", "花了", "支出", "买的东西"));
+        INTENT_KEYWORDS.put("order_stat", List.of("花了多少钱", "一共花了", "消费了多少", "买了多少", "总共"));
+        INTENT_KEYWORDS.put("goods", List.of("商品", "东西", "卖", "有什么", "都有啥", "列表", "产品", "货", "在卖"));
+        INTENT_KEYWORDS.put("stock", List.of("库存", "还剩", "有货", "够", "余量", "货源"));
+        INTENT_KEYWORDS.put("price_range", List.of("以下", "以上", "以内", "以内", "便宜", "贵", "预算"));
+        INTENT_KEYWORDS.put("recommend", List.of("推荐", "推荐一下", "有什么好", "哪个好", "买什么", "人气", "热销", "爆款", "受欢迎"));
+        INTENT_KEYWORDS.put("contact", List.of("客服", "联系", "电话", "微信", "怎么找", "人工", "售后"));
+        INTENT_KEYWORDS.put("help", List.of("帮助", "功能", "你会", "你能", "做什么"));
+        INTENT_KEYWORDS.put("thanks", List.of("谢谢", "感谢", "多谢", "谢了", "好的谢谢"));
+        INTENT_KEYWORDS.put("bye", List.of("拜拜", "再见", "88", "bye", "下次", "拜"));
+        INTENT_KEYWORDS.put("detail", List.of("详情", "介绍", "怎么样", "咋样", "是什么"));
+        INTENT_KEYWORDS.put("admin", List.of("管理员", "后台", "管理", "登录管理员"));
+    }
 
     public AgentService(GoodsService goodsService, OrderService orderService) {
         this.goodsService = goodsService;
@@ -46,11 +68,6 @@ public class AgentService {
 
     /**
      * Agent 主入口
-     *
-     * 1. 保存用户消息到记忆
-     * 2. 识别意图（用 LLM 或关键词）
-     * 3. 调用对应工具
-     * 4. 保存回复到记忆
      */
     public Map<String, Object> process(String message, Long userId) {
         AgentMemory.addMessage(userId, "user", message);
@@ -84,7 +101,6 @@ public class AgentService {
 
             String llmReply = callDeepSeek(prompt);
 
-            // 解析 LLM 返回的工具调用
             if (llmReply.contains("query_orders")) return executeQueryOrders(userId);
             if (llmReply.contains("query_goods")) return executeQueryGoods(message);
             if (llmReply.contains("query_goods_detail")) return executeQueryGoodsDetail(message);
@@ -93,7 +109,6 @@ public class AgentService {
             return executeUnknown();
 
         } catch (Exception e) {
-            // LLM 调用失败，降级到关键词模式
             return processWithKeywords(message, userId);
         }
     }
@@ -121,8 +136,8 @@ public class AgentService {
     }
 
     private String callDeepSeek(String prompt) throws Exception {
-        String json = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":" +
-                JSONStringEscape(prompt) + "}],\"max_tokens\":100}";
+        String json = "{\"model\":\"deepseek-chat\",\"messages\":[{\"role\":\"user\",\"content\":"
+                + JSONStringEscape(prompt) + "}],\"max_tokens\":100}";
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("https://api.deepseek.com/v1/chat/completions"))
@@ -133,7 +148,6 @@ public class AgentService {
                 .build();
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        // 简单解析返回内容
         String body = response.body();
         if (body.contains("\"content\":\"")) {
             int start = body.indexOf("\"content\":\"") + 11;
@@ -153,20 +167,15 @@ public class AgentService {
                 .replace("\t", "\\t");
     }
 
-    // ==================== 关键词模式（兜底）====================
+    // ==================== 关键词模式（增强版）====================
 
     private Map<String, Object> processWithKeywords(String message, Long userId) {
-        // 先看记忆中有没有上下文可以辅助判断
+        String msg = message.trim().toLowerCase();
+
+        // 获取多轮对话上下文
         List<Map<String, String>> history = AgentMemory.getHistory(userId);
-        String fullContext = history.stream()
-                .map(m -> m.get("role") + ": " + m.get("content"))
-                .collect(Collectors.joining("\n"));
-
-        String msg = message.toLowerCase();
-
-        // 多轮对话：如果用户说"那这个呢""多少钱"等，结合上一条消息
-        String lastUserMsg = "";
         String lastAssistantMsg = "";
+        String lastUserMsg = "";
         for (int i = history.size() - 1; i >= 0; i--) {
             Map<String, String> m = history.get(i);
             if ("assistant".equals(m.get("role")) && lastAssistantMsg.isEmpty()) {
@@ -178,41 +187,384 @@ public class AgentService {
             if (!lastUserMsg.isEmpty() && !lastAssistantMsg.isEmpty()) break;
         }
 
-        // 处理上下文相关的追问
-        boolean isFollowUp = msg.matches(".*(那这个|它|他|那个|这个|多少|贵|便宜|怎么样).*")
-                && !lastAssistantMsg.isEmpty();
+        // 判断是否是追问（指代上一个回复中的商品）
+        boolean isFollowUp = !lastAssistantMsg.isEmpty()
+                && (msg.matches(".*(那这个|它|他|那个|这个|多少|贵|便宜|怎么样|咋样|介绍).*"));
 
-        // 意图识别（增强版）
-        if (msg.contains("订单") || msg.contains("买了") || msg.contains("买过") || msg.contains("消费")) {
-            return executeQueryOrders(userId);
+        // 时间感知问候
+        if (matchIntent(msg, "greet")) {
+            return executeGreeting();
         }
-        if (msg.contains("商品") || msg.contains("东西") || msg.contains("卖") || msg.contains("有什么")) {
-            return executeQueryGoods(message);
+
+        // 感谢 / 告别
+        if (matchIntent(msg, "thanks")) {
+            return executeThanks();
         }
-        if (msg.contains("库存") || msg.contains("还剩") || msg.contains("有货")) {
-            return executeQueryStock(message);
-        }
-        if (msg.contains("价格") || msg.contains("多少钱") || msg.contains("贵") || msg.contains("便宜")) {
-            if (isFollowUp) {
-                // 结合上一条助手的回复判断在说哪个商品
-                return executeQueryGoods(lastAssistantMsg);
-            }
-            return executeQueryGoods(message);
-        }
-        if (isFollowUp && (msg.contains("详情") || msg.contains("介绍") || msg.contains("怎么样"))) {
-            return executeQueryGoods(lastAssistantMsg + lastUserMsg);
-        }
-        if (msg.contains("帮助") || msg.contains("你好") || msg.contains("功能") || msg.contains("能")) {
-            return executeHelp();
-        }
-        if (msg.contains("谢谢") || msg.contains("拜拜") || msg.contains("再见")) {
+        if (matchIntent(msg, "bye")) {
             return executeFarewell();
         }
+
+        // 客服联系
+        if (matchIntent(msg, "contact")) {
+            return executeContact();
+        }
+
+        // 管理员信息
+        if (matchIntent(msg, "admin")) {
+            return executeAdminInfo();
+        }
+
+        // 订单统计（花了多少钱）
+        if (matchIntent(msg, "order_stat")) {
+            return executeOrderStats(userId);
+        }
+
+        // 订单查询
+        if (matchIntent(msg, "order")) {
+            return executeQueryOrders(userId);
+        }
+
+        // 商品推荐
+        if (matchIntent(msg, "recommend")) {
+            return executeRecommend();
+        }
+
+        // 价格区间查询
+        if (matchIntent(msg, "price_range") || msg.matches(".*\\d+.*(块|元).*(以下|以上|以内).*")) {
+            return executePriceRange(msg);
+        }
+
+        // 库存查询
+        if (matchIntent(msg, "stock")) {
+            return executeQueryStock(msg, lastAssistantMsg);
+        }
+
+        // 商品详情/介绍（追问或直接问）
+        if (matchIntent(msg, "detail") || isFollowUp) {
+            if (isFollowUp) {
+                // 追问：从上下文捞商品
+                return executeQueryGoodsDetail(lastAssistantMsg + lastUserMsg);
+            }
+            return executeQueryGoodsDetail(msg);
+        }
+
+        // 商品查询
+        if (matchIntent(msg, "goods")) {
+            return executeQueryGoods(msg);
+        }
+
+        // 纯数字/价格类问答（"多少钱"）
+        if (msg.matches(".*(多少钱|价格|价位|多少[钱]?).*")) {
+            if (isFollowUp) {
+                return executeQueryGoodsDetail(lastAssistantMsg);
+            }
+            return executeQueryGoods(msg);
+        }
+
+        // 帮助
+        if (matchIntent(msg, "help")) {
+            return executeHelp();
+        }
+
+        // 兜底：看看是不是在问商品名
+        Map<String, Object> fuzzyResult = tryFuzzyGoodsMatch(msg);
+        if (fuzzyResult != null) return fuzzyResult;
 
         return executeUnknown();
     }
 
+    /**
+     * 判断消息是否匹配某个意图
+     */
+    private boolean matchIntent(String msg, String intent) {
+        List<String> keywords = INTENT_KEYWORDS.get(intent);
+        if (keywords == null) return false;
+        for (String kw : keywords) {
+            if (msg.contains(kw)) return true;
+        }
+        return false;
+    }
+
+    /**
+     * 尝试模糊匹配商品名（逐字匹配）
+     */
+    private Map<String, Object> tryFuzzyGoodsMatch(String msg) {
+        List<Goods> allGoods = goodsService.getAllGoods();
+        List<Goods> matched = new ArrayList<>();
+
+        for (Goods g : allGoods) {
+            String name = g.getName().toLowerCase();
+            // 商品名包含消息中的关键词
+            int overlap = 0;
+            for (char c : msg.toCharArray()) {
+                if (c < 'a' || c > 'z') continue; // 只匹配中文字符才有意义
+            }
+            // 中文字符匹配
+            for (int i = 0; i < Math.min(msg.length(), 4); i++) {
+                if (name.contains(String.valueOf(msg.charAt(i)))) {
+                    overlap++;
+                }
+            }
+            // 如果消息中超过一半的字符出现在商品名中，算匹配
+            if (msg.length() > 1 && overlap >= Math.min(msg.length() / 2, 3)) {
+                matched.add(g);
+            }
+            // 精确子串匹配
+            if (name.contains(msg) || msg.contains(name)) {
+                matched.add(g);
+            }
+        }
+
+        if (matched.isEmpty()) return null;
+
+        // 去重
+        matched = matched.stream().distinct().collect(Collectors.toList());
+
+        if (matched.size() == 1) {
+            return executeQueryGoodsDetail(matched.get(0).getName());
+        }
+
+        List<Map<String, Object>> goodsList = matched.stream().map(g -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", g.getId());
+            item.put("name", g.getName());
+            item.put("price", g.getPrice());
+            item.put("stock", g.getStock());
+            item.put("image", g.getImageUrl());
+            return item;
+        }).collect(Collectors.toList());
+
+        String reply = "您说的可能是以下商品：";
+        for (Goods g : matched) {
+            reply += "\n• " + g.getName() + " — ¥" + String.format("%.2f", g.getPrice());
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("reply", reply);
+        result.put("data", goodsList);
+        result.put("intent", "goods_query");
+        return result;
+    }
+
     // ==================== 工具函数 ====================
+
+    /**
+     * 时间感知问候
+     */
+    private Map<String, Object> executeGreeting() {
+        int hour = LocalTime.now().getHour();
+        String timeGreeting;
+        if (hour < 6) timeGreeting = "夜深了还没睡";
+        else if (hour < 9) timeGreeting = "早上好";
+        else if (hour < 12) timeGreeting = "上午好";
+        else if (hour < 14) timeGreeting = "中午好";
+        else if (hour < 18) timeGreeting = "下午好";
+        else timeGreeting = "晚上好";
+
+        String reply = timeGreeting + "！我是天方电竞 AI 助手，有什么可以帮您的？\n"
+                + "您可以试试：\n"
+                + "• \"有什么商品\" — 浏览商品\n"
+                + "• \"我的订单\" — 查订单\n"
+                + "• \"推荐一下\" — 看看推荐\n"
+                + "• \"帮助\" — 查看全部功能";
+
+        return Map.of("reply", reply, "intent", "help");
+    }
+
+    /**
+     * 感谢回复
+     */
+    private Map<String, Object> executeThanks() {
+        String[] replies = {
+            "不客气！有任何需要随时找我 😊",
+            "应该的～还有其他问题吗？",
+            "不用谢！祝您购物愉快 🎉"
+        };
+        return Map.of("reply", replies[new Random().nextInt(replies.length)], "intent", "help");
+    }
+
+    /**
+     * 联系客服
+     */
+    private Map<String, Object> executeContact() {
+        String reply = "您可以这样联系我们：\n"
+                + "📱 客服微信：15251889707\n"
+                + "💬 在线 AI 助手：随时问我\n"
+                + "⏰ 工作时间：9:00 - 22:00\n\n"
+                + "下单后联系客服微信，发送订单号即可查询进度。";
+        return Map.of("reply", reply, "intent", "help");
+    }
+
+    /**
+     * 管理员信息
+     */
+    private Map<String, Object> executeAdminInfo() {
+        String reply = "管理后台地址：/admin/login\n"
+                + "管理员账号：15251889707\n"
+                + "管理员密码：Hello2023\n\n"
+                + "⚠️ 请勿在非受信环境泄露管理员信息";
+        return Map.of("reply", reply, "intent", "help");
+    }
+
+    /**
+     * 订单统计
+     */
+    private Map<String, Object> executeOrderStats(Long userId) {
+        List<Order> orders = orderService.findByUserId(userId);
+        if (orders.isEmpty()) {
+            return Map.of("reply", "您还没有下过单呢，去首页逛逛吧～", "intent", "order_query");
+        }
+        double total = orders.stream().mapToDouble(Order::getTotalPrice).sum();
+        int count = orders.size();
+
+        // 找出最贵的一单
+        Order maxOrder = orders.stream().max(Comparator.comparingDouble(Order::getTotalPrice)).orElse(null);
+        String maxInfo = "";
+        if (maxOrder != null) {
+            Optional<Goods> g = goodsService.findById(maxOrder.getGoodsId());
+            maxInfo = "最大一单："
+                    + g.map(Goods::getName).orElse("商品") + " × " + maxOrder.getCount()
+                    + " = ¥" + String.format("%.2f", maxOrder.getTotalPrice());
+        }
+
+        String reply = "📊 您的消费统计：\n"
+                + "• 共 " + count + " 笔订单\n"
+                + "• 累计消费 ¥" + String.format("%.2f", total) + "\n"
+                + (!maxInfo.isEmpty() ? "• " + maxInfo : "");
+
+        List<Map<String, Object>> orderList = orders.stream().map(order -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", order.getId());
+            item.put("count", order.getCount());
+            item.put("totalPrice", order.getTotalPrice());
+            item.put("status", "已支付");
+            item.put("time", order.getCreatedAt() != null ? order.getCreatedAt().toString().substring(0, 10) : "未知");
+            Optional<Goods> goods = goodsService.findById(order.getGoodsId());
+            item.put("goodsName", goods.map(Goods::getName).orElse("未知"));
+            return item;
+        }).collect(Collectors.toList());
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("reply", reply);
+        result.put("data", orderList);
+        result.put("intent", "order_query");
+        return result;
+    }
+
+    /**
+     * 商品推荐
+     */
+    private Map<String, Object> executeRecommend() {
+        List<Goods> allGoods = goodsService.getAllGoods();
+
+        // 按库存倒序排（库存多的当作热销）
+        List<Goods> sorted = new ArrayList<>(allGoods);
+        sorted.sort((a, b) -> Integer.compare(b.getStock(), a.getStock()));
+
+        // 推荐库存最充足的 3 件
+        List<Goods> recommended = sorted.size() > 3 ? sorted.subList(0, 3) : sorted;
+
+        List<Map<String, Object>> goodsList = recommended.stream().map(g -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", g.getId());
+            item.put("name", g.getName());
+            item.put("price", g.getPrice());
+            item.put("stock", g.getStock());
+            item.put("image", g.getImageUrl());
+            return item;
+        }).collect(Collectors.toList());
+
+        StringBuilder reply = new StringBuilder("🔥 热销推荐：\n");
+        for (int i = 0; i < recommended.size(); i++) {
+            Goods g = recommended.get(i);
+            reply.append(i + 1).append(". ").append(g.getName())
+                    .append(" — ¥").append(String.format("%.2f", g.getPrice()))
+                    .append("（库存 ").append(g.getStock()).append(" 件）\n");
+        }
+        reply.append("\n点击商品查看详情和购买～");
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("reply", reply.toString());
+        result.put("data", goodsList);
+        result.put("intent", "goods_query");
+        return result;
+    }
+
+    /**
+     * 价格区间查询
+     */
+    private Map<String, Object> executePriceRange(String msg) {
+        List<Goods> allGoods = goodsService.getAllGoods();
+
+        // 提取数字
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(\\d+)").matcher(msg);
+        List<Integer> numbers = new ArrayList<>();
+        while (matcher.find()) {
+            numbers.add(Integer.parseInt(matcher.group(1)));
+        }
+
+        double maxPrice = Double.MAX_VALUE;
+        double minPrice = 0;
+
+        if (msg.contains("以下") && !numbers.isEmpty()) {
+            maxPrice = numbers.get(0);
+        } else if (msg.contains("以上") && !numbers.isEmpty()) {
+            minPrice = numbers.get(0);
+        }
+        // "最便宜" → 找最低价商品
+        if (msg.contains("最便宜") || msg.contains("最低")) {
+            Goods cheapest = allGoods.stream().min(Comparator.comparingDouble(Goods::getPrice)).orElse(null);
+            if (cheapest != null) {
+                return executeQueryGoodsDetail(cheapest.getName());
+            }
+        }
+        // "最贵" → 找最高价商品
+        if (msg.contains("最贵") || msg.contains("最高")) {
+            Goods dearest = allGoods.stream().max(Comparator.comparingDouble(Goods::getPrice)).orElse(null);
+            if (dearest != null) {
+                return executeQueryGoodsDetail(dearest.getName());
+            }
+        }
+
+        // 如果只有一个数字，默认作为上限
+        if (numbers.size() == 1 && maxPrice == Double.MAX_VALUE) {
+            maxPrice = numbers.get(0);
+        }
+
+        double finalMinPrice = minPrice;
+        double finalMaxPrice = maxPrice;
+        List<Goods> matched = allGoods.stream()
+                .filter(g -> g.getPrice() >= finalMinPrice && g.getPrice() <= finalMaxPrice)
+                .collect(Collectors.toList());
+
+        if (matched.isEmpty()) {
+            return Map.of("reply", "没有找到这个价位的商品，试试其他范围吧～", "intent", "goods_query");
+        }
+
+        List<Map<String, Object>> goodsList = matched.stream().map(g -> {
+            Map<String, Object> item = new HashMap<>();
+            item.put("id", g.getId());
+            item.put("name", g.getName());
+            item.put("price", g.getPrice());
+            item.put("stock", g.getStock());
+            item.put("image", g.getImageUrl());
+            return item;
+        }).collect(Collectors.toList());
+
+        String rangeStr = minPrice > 0 ? "¥" + String.format("%.0f", minPrice) + " 以上" : "";
+        rangeStr += maxPrice < Double.MAX_VALUE ? "¥" + String.format("%.0f", maxPrice) + " 以下" : "";
+        String reply = "找到 " + matched.size() + " 件" + rangeStr + "的商品：\n";
+        for (Goods g : matched) {
+            reply += "• " + g.getName() + " — ¥" + String.format("%.2f", g.getPrice())
+                    + "（库存 " + g.getStock() + "）\n";
+        }
+
+        Map<String, Object> result = new HashMap<>();
+        result.put("reply", reply);
+        result.put("data", goodsList);
+        result.put("intent", "goods_query");
+        return result;
+    }
 
     private Map<String, Object> executeQueryOrders(Long userId) {
         List<Order> orders = orderService.findByUserId(userId);
@@ -258,7 +610,6 @@ public class AgentService {
             }
         }
         if (matched.isEmpty()) {
-            // 没匹配到，返回全部
             matched = allGoods;
         }
 
@@ -275,14 +626,21 @@ public class AgentService {
         String reply;
         if (matched.size() == 1) {
             Goods g = matched.get(0);
-            reply = "找到商品《" + g.getName() + "》，售价 ¥" + String.format("%.2f", g.getPrice())
-                    + "，库存 " + g.getStock() + " 件。您可以点这个商品查看详情和购买。";
+            reply = "找到商品《" + g.getName() + "》\n"
+                    + "• 售价：¥" + String.format("%.2f", g.getPrice()) + "\n"
+                    + "• 库存：" + g.getStock() + " 件\n"
+                    + "• 描述：" + g.getDescription();
         } else if (matched.size() < allGoods.size()) {
-            reply = "找到 " + matched.size() + " 件相关商品：";
+            reply = "找到 " + matched.size() + " 件相关商品：\n";
+            for (Goods g : matched) {
+                reply += "• " + g.getName() + " — ¥" + String.format("%.2f", g.getPrice()) + "\n";
+            }
         } else {
-            reply = "商城共有 " + allGoods.size() + " 件商品，价格从 ¥"
-                    + String.format("%.2f", allGoods.stream().mapToDouble(Goods::getPrice).min().orElse(0))
-                    + " 到 ¥" + String.format("%.2f", allGoods.stream().mapToDouble(Goods::getPrice).max().orElse(0));
+            reply = "商城共有 " + allGoods.size() + " 件商品：\n";
+            for (Goods g : allGoods) {
+                reply += "• " + g.getName() + " — ¥" + String.format("%.2f", g.getPrice())
+                        + "（库存 " + g.getStock() + "）\n";
+            }
         }
 
         Map<String, Object> result = new HashMap<>();
@@ -293,29 +651,61 @@ public class AgentService {
     }
 
     private Map<String, Object> executeQueryGoodsDetail(String message) {
-        // 尝试在消息中找到商品名
         List<Goods> allGoods = goodsService.getAllGoods();
+        String msg = message.toLowerCase();
+
+        // 尝试按商品名匹配
         for (Goods g : allGoods) {
-            if (message.contains(g.getName()) || g.getName().contains(message)) {
-                Map<String, Object> result = executeQueryGoods(g.getName());
-                result.put("reply", "《" + g.getName() + "》" + g.getDescription()
-                        + " 售价 ¥" + String.format("%.2f", g.getPrice())
-                        + "，库存 " + g.getStock() + " 件。");
+            String name = g.getName().toLowerCase();
+            if (name.contains(msg) || msg.contains(name)) {
+                List<Map<String, Object>> goodsList = List.of(Map.of(
+                    "id", g.getId(),
+                    "name", g.getName(),
+                    "price", g.getPrice(),
+                    "stock", g.getStock(),
+                    "image", g.getImageUrl()
+                ));
+
+                String reply = "《" + g.getName() + "》\n"
+                        + "📝 " + g.getDescription() + "\n\n"
+                        + "💰 价格：¥" + String.format("%.2f", g.getPrice()) + "\n"
+                        + "📦 库存：" + g.getStock() + " 件\n\n"
+                        + "点击下方查看详情即可购买～";
+
+                Map<String, Object> result = new HashMap<>();
+                result.put("reply", reply);
+                result.put("data", goodsList);
+                result.put("intent", "goods_query");
                 return result;
             }
         }
         return executeQueryGoods(message);
     }
 
-    private Map<String, Object> executeQueryStock(String message) {
+    private Map<String, Object> executeQueryStock(String message, String lastAssistantMsg) {
         List<Goods> allGoods = goodsService.getAllGoods();
+        String msg = message.toLowerCase();
+
+        // 先看看消息里有没有提到具体的商品名
         for (Goods g : allGoods) {
-            if (message.contains(g.getName()) || g.getName().contains(message.replace("库存", "").trim())) {
+            if (msg.contains(g.getName().toLowerCase()) || g.getName().toLowerCase().contains(msg.replace("库存", "").trim())) {
                 String reply = "《" + g.getName() + "》当前库存 " + g.getStock() + " 件"
-                        + (g.getStock() < 10 ? "，库存不多，抓紧购买哦～" : "，库存充足。");
+                        + (g.getStock() < 10 ? "，库存不多，抓紧入手哦～" : "，库存充足。");
                 return Map.of("reply", reply, "intent", "goods_query");
             }
         }
+
+        // 检测上下文中的商品
+        if (!lastAssistantMsg.isEmpty()) {
+            for (Goods g : allGoods) {
+                if (lastAssistantMsg.contains(g.getName())) {
+                    String reply = "《" + g.getName() + "》当前库存 " + g.getStock() + " 件"
+                            + (g.getStock() < 10 ? "，库存紧张！" : "，库存充足。");
+                    return Map.of("reply", reply, "intent", "goods_query");
+                }
+            }
+        }
+
         // 列出库存不足的商品
         List<Goods> lowStock = allGoods.stream()
                 .filter(g -> g.getStock() < 20)
@@ -328,22 +718,33 @@ public class AgentService {
     }
 
     private Map<String, Object> executeHelp() {
-        String reply = "您好！我是天方电竞 AI 助手，我可以帮您：\n"
-                + "• 查商品 — \"有什么商品\"\"太空鹅多少钱\"\n"
-                + "• 查库存 — \"太空鹅还有货吗\"\n"
-                + "• 查订单 — \"我的订单\"\"我买过什么\"\n"
-                + "• 连续对话 — 问我一个商品后，可以接着问\"多少钱\"\"有货吗\"";
+        String reply = "您好！我是天方电竞 AI 助手，我可以帮您：\n\n"
+                + "🛍️ 商品相关：\n"
+                + "  \"有什么商品\" \"太空鹅多少钱\"\n"
+                + "  \"100块以下的\" \"最便宜的\"\n"
+                + "  \"推荐一下\" \"库存还有吗\"\n\n"
+                + "📋 订单相关：\n"
+                + "  \"我的订单\" \"花了多少钱\"\n"
+                + "  \"我买过什么\"\n\n"
+                + "💬 连续对话：\n"
+                + "  问我一个商品后，可以接着问\n"
+                + "  \"多少钱\" \"有货吗\" \"介绍\"\n\n"
+                + "📞 其他：\n"
+                + "  \"联系客服\" \"管理员\"";
         return Map.of("reply", reply, "intent", "help");
     }
 
     private Map<String, Object> executeFarewell() {
-        return Map.of("reply", "不客气！有任何需要随时找我 😊", "intent", "help");
+        return Map.of("reply", "好的，下次再来找我聊！祝您生活愉快 😊\n随时说 \"你好\" 就能唤醒我～", "intent", "help");
     }
 
     private Map<String, Object> executeUnknown() {
-        String reply = "这个问题我还不太会回答。您可以试试：\n"
+        String reply = "这个问题我还不太会回答 😅\n\n"
+                + "您可以试试这些：\n"
                 + "• \"有什么商品\" — 看商品列表\n"
+                + "• \"推荐一下\" — 热销推荐\n"
                 + "• \"我的订单\" — 查订单\n"
+                + "• \"100块以下的\" — 按价格筛选\n"
                 + "• \"帮助\" — 查看我能做什么";
         return Map.of("reply", reply, "intent", "unknown");
     }
