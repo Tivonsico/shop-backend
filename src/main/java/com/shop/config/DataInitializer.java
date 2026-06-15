@@ -36,24 +36,24 @@ public class DataInitializer implements CommandLineRunner {
         g1.setName("腾讯QQ正版铜工艺品太空鹅");
         g1.setPrice(190.0);
         g1.setStock(100);
-        g1.setDescription("全铜打造，精致工艺");
+        g1.setDescription("全铜打造，精致工艺，面试字节必备吉祥物");
         g1.setImageUrl("https://qcloudimg.tencent-cloud.cn/raw/063123361b3a397f4ba6894591c3a006.png");
         goodsRepository.save(g1);
 
         Goods g2 = new Goods();
-        g2.setName("随身蓝牙无线音箱");
-        g2.setPrice(100.0);
-        g2.setStock(50);
-        g2.setDescription("小型便携式迷你户外音箱");
-        g2.setImageUrl("https://qcloudimg.tencent-cloud.cn/raw/7b2c975b21d24c43f1609e0b0328dccf.png");
+        g2.setName("Java 面试高分宝典");
+        g2.setPrice(79.0);
+        g2.setStock(42);
+        g2.setDescription("从 Spring Boot 到 JVM 调优，面字节够用了");
+        g2.setImageUrl("https://picsum.photos/seed/java/400/400");
         goodsRepository.save(g2);
 
         Goods g3 = new Goods();
-        g3.setName("软底一脚蹬小白鞋");
-        g3.setPrice(300.0);
-        g3.setStock(200);
-        g3.setDescription("休闲棉加绒，显脚瘦");
-        g3.setImageUrl("https://qcloudimg.tencent-cloud.cn/raw/62eb1d8d8ea3b05302c199636f787438.png");
+        g3.setName("程序员颈椎按摩仪");
+        g3.setPrice(259.0);
+        g3.setStock(88);
+        g3.setDescription("写码写累了？躺平也能拿 Offer");
+        g3.setImageUrl("https://picsum.photos/seed/neck/400/400");
         goodsRepository.save(g3);
 
         // 插入一个测试用户
