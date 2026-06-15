@@ -39,7 +39,10 @@ public class AgentService {
     private final OrderService orderService;
     private final HttpClient httpClient;
 
-    private static final String API_KEY = System.getProperty("DEEPSEEK_API_KEY", "");
+    // 优先读环境变量（Railway部署用），没有就读系统属性（本地开发用）
+    private static final String API_KEY = System.getenv("DEEPSEEK_API_KEY") != null
+            ? System.getenv("DEEPSEEK_API_KEY")
+            : System.getProperty("DEEPSEEK_API_KEY", "");
     private static final boolean USE_LLM = !API_KEY.isEmpty() && !API_KEY.equals("sk-your-key-here");
 
     // 近义词表，增强意图识别
