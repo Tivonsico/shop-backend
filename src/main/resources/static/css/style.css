@@ -88,8 +88,10 @@ body {
 
 .goods-card img {
     width: 100%;
-    height: 220px;
-    object-fit: cover;
+    height: auto;
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+    background: #fafafa;
 }
 
 .goods-card-body {
@@ -242,7 +244,8 @@ body {
 .goods-detail img {
     width: 400px;
     height: 400px;
-    object-fit: cover;
+    object-fit: contain;
+    background: #fafafa;
     border-radius: 12px;
     flex-shrink: 0;
 }
@@ -381,7 +384,8 @@ body {
     }
 
     .goods-card img {
-        height: 160px;
+        aspect-ratio: 1 / 1;
+        height: auto;
     }
 
     .goods-card-body {
@@ -416,6 +420,8 @@ body {
         width: 100%;
         height: auto;
         aspect-ratio: 1;
+        object-fit: contain;
+        background: #fafafa;
     }
 
     .goods-detail-info h2 {
