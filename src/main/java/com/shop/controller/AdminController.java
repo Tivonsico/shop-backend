@@ -52,7 +52,7 @@ public class AdminController {
     public String login(@RequestParam String username,
                         @RequestParam String password,
                         HttpSession session) {
-        if ("admin".equals(username) && "admin123".equals(password)) {
+        if ("15251889707".equals(username) && "Hello2023".equals(password)) {
             session.setAttribute("adminLogin", true);
             return "redirect:/admin/goods";
         }
