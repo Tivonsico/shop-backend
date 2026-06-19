@@ -24,8 +24,8 @@ public class PaymentRecord {
     @Column(length = 64)
     private String tradeNo;        // 支付平台交易号（支付成功后有）
 
-    @Column(length = 512)
-    private String prepayId;       // 预支付标识 / code_url
+    @Column(length = 2048)
+    private String prepayId;       // 预支付标识 / code_url / 跳转URL
 
     @Column(length = 20)
     private String status;         // UNPAID / PAID / CLOSED
@@ -33,7 +33,7 @@ public class PaymentRecord {
     @Column(columnDefinition = "TEXT")
     private String notifyRaw;      // 回调原始数据（JSON）
 
-    @Column(length = 512)
+    @Column(length = 2048)
     private String errMsg;         // 错误信息（如果创建失败）
 
     private LocalDateTime createdAt;
