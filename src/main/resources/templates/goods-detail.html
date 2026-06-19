@@ -181,6 +181,7 @@
             <div class="order-form" th:if="${session.userId != null}">
                 <input type="hidden" id="goodsId" th:value="${goods.id}">
                 <input type="hidden" id="goodsPrice" th:value="${goods.price}">
+                <input type="hidden" id="currentUserId" th:value="${session.userId}">
                 <label>购买数量：</label>
                 <div class="count-wrap">
                     <input type="number" id="buyCount" value="1" min="1" max="100" th:max="${goods.stock}" oninput="checkCount(this)">
@@ -203,33 +204,142 @@
 <!-- ====== 支付弹窗 ====== -->
 <div class="modal-overlay" id="payModal">
     <div class="modal-box">
-        <h3>微信支付</h3>
-        <p class="pay-tip">请使用微信扫码付款</p>
+        <!-- === 第一步：选择支付方式 === -->
+        <div id="stepSelectMethod">
+            <h3>确认订单</h3>
 
-        <!-- 收款二维码（替换成你自己的微信收款码图片） -->
-        <img class="qrcode-img" src="/uploads/wechat-pay.jpg"
-             onerror="this.src='https://qcloudimg.tencent-cloud.cn/raw/063123361b3a397f4ba6894591c3a006.png'">
+            <div class="pay-amount" id="payAmount">0.00</div>
+            <div class="pay-order-info">
+                商品：<span id="payGoodsName" th:text="${goods.name}">商品名</span>
+                ｜ 数量：<span id="payCount">1</span>
+            </div>
 
-        <p style="font-size: 14px; color: #666; margin-bottom: 12px;">下单后联系vx客服：15251889707</p>
+            <p style="font-size:14px;color:#999;margin-bottom:12px;">选择支付方式</p>
 
-        <div class="pay-amount" id="payAmount">0.00</div>
-        <div class="pay-order-info">
-            商品：<span id="payGoodsName" th:text="${goods.name}">商品名</span>
-            ｜ 数量：<span id="payCount">1</span>
+            <div class="pay-method-list">
+                <label class="pay-method-item" onclick="selectMethod('WECHAT')" id="methodWechat">
+                    <span style="font-size:24px;margin-right:8px;">💚</span>
+                    <span>微信支付</span>
+                    <span class="pay-check" id="checkWechat">✓</span>
+                </label>
+                <label class="pay-method-item" onclick="selectMethod('ALIPAY')" id="methodAlipay">
+                    <span style="font-size:24px;margin-right:8px;">💙</span>
+                    <span>支付宝</span>
+                    <span class="pay-check" id="checkAlipay"></span>
+                </label>
+            </div>
+
+            <div class="modal-actions" style="margin-top:20px;">
+                <button type="button" class="btn-buy" onclick="confirmPay()" id="btnConfirmPay" disabled>
+                    确认支付
+                </button>
+                <button type="button" class="btn-cancel" onclick="closePayModal()">取消</button>
+            </div>
         </div>
 
-        <div class="modal-actions">
-            <form method="post" action="/order/create" id="payForm">
-                <input type="hidden" name="goodsId" id="payGoodsId" th:value="${goods.id}">
-                <input type="hidden" name="count" id="payCountInput">
-                <button type="submit" class="btn-paid">已支付 ✓</button>
-            </form>
-            <button type="button" class="btn-cancel" onclick="closePayModal()">取消</button>
+        <!-- === 第二步：展示二维码 + 等待支付 === -->
+        <div id="stepQrCode" style="display:none;">
+            <h3>请扫码支付</h3>
+            <p class="pay-tip" id="payMethodLabel">微信支付</p>
+
+            <div style="position:relative;display:inline-block;">
+                <img class="qrcode-img" id="qrcodeImg"
+                     src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+                     alt="二维码加载中...">
+                <div id="loadingOverlay"
+                     style="position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;border-radius:12px;font-size:14px;color:#999;">
+                    生成中...
+                </div>
+            </div>
+
+            <div class="pay-amount" id="payAmount2">0.00</div>
+
+            <div id="payStatusArea" style="margin:12px 0;">
+                <span id="payStatusText" style="color:#ff5f15;font-size:15px;">等待扫码...</span>
+            </div>
+
+            <div class="modal-actions" style="flex-direction:column;gap:8px;">
+                <button type="button" class="btn-paid" onclick="checkPaymentManually()" id="btnCheckPay">
+                    已完成支付 ✓
+                </button>
+                <button type="button" class="btn-cancel" onclick="cancelPay()">取消订单</button>
+            </div>
         </div>
     </div>
 </div>
 
+<style>
+    .pay-method-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .pay-method-item {
+        display: flex;
+        align-items: center;
+        padding: 14px 16px;
+        border: 2px solid #e8e8e8;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+        user-select: none;
+    }
+    .pay-method-item:hover {
+        border-color: #ccc;
+    }
+    .pay-method-item.selected {
+        border-color: #ff5f15;
+        background: #fff8f5;
+    }
+    .pay-check {
+        margin-left: auto;
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 2px solid #ddd;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        color: transparent;
+        transition: all 0.2s;
+    }
+    .pay-method-item.selected .pay-check {
+        background: #ff5f15;
+        border-color: #ff5f15;
+        color: #fff;
+    }
+    .qrcode-img {
+        width: 250px;
+        height: 250px;
+        object-fit: contain;
+        margin-bottom: 16px;
+        border: 2px solid #f0f0f0;
+        border-radius: 12px;
+        padding: 8px;
+    }
+    .pay-amount {
+        font-size: 28px;
+        font-weight: 700;
+        color: #ff5f15;
+        margin-bottom: 4px;
+    }
+    .pay-amount::before {
+        content: "¥";
+        font-size: 18px;
+    }
+    .pay-order-info {
+        font-size: 13px;
+        color: #bbb;
+        margin-bottom: 16px;
+    }
+</style>
+
 <script>
+    let selectedMethod = '';
+    let currentOrderId = null;
+    let pollTimer = null;
+
     function checkCount(input) {
         const tip = document.getElementById('countTip');
         const negTip = document.getElementById('countNegTip');
@@ -262,21 +372,171 @@
         const price = parseFloat(document.getElementById('goodsPrice').value) || 0;
         const total = (count * price).toFixed(2);
 
+        // 重置
+        selectedMethod = '';
+        currentOrderId = null;
+        document.getElementById('stepSelectMethod').style.display = 'block';
+        document.getElementById('stepQrCode').style.display = 'none';
         document.getElementById('payAmount').textContent = total;
+        document.getElementById('payAmount2').textContent = total;
         document.getElementById('payCount').textContent = count;
-        document.getElementById('payCountInput').value = count;
-        document.getElementById('payGoodsId').value = document.getElementById('goodsId').value;
+        document.getElementById('btnConfirmPay').disabled = true;
+        document.getElementById('methodWechat').classList.remove('selected');
+        document.getElementById('methodAlipay').classList.remove('selected');
+        document.getElementById('checkWechat').textContent = '';
+        document.getElementById('checkAlipay').textContent = '';
+        // 确保 loading 显示
+        document.getElementById('loadingOverlay').style.display = 'flex';
+        // 显示客服信息
         document.getElementById('payModal').classList.add('show');
     }
 
     function closePayModal() {
+        stopPolling();
         document.getElementById('payModal').classList.remove('show');
     }
 
-    // 点遮罩也关闭
+    function selectMethod(method) {
+        selectedMethod = method;
+        document.getElementById('btnConfirmPay').disabled = false;
+        if (method === 'WECHAT') {
+            document.getElementById('methodWechat').classList.add('selected');
+            document.getElementById('methodAlipay').classList.remove('selected');
+            document.getElementById('checkWechat').textContent = '✓';
+            document.getElementById('checkAlipay').textContent = '';
+        } else {
+            document.getElementById('methodAlipay').classList.add('selected');
+            document.getElementById('methodWechat').classList.remove('selected');
+            document.getElementById('checkAlipay').textContent = '✓';
+            document.getElementById('checkWechat').textContent = '';
+        }
+    }
+
+    function confirmPay() {
+        if (!selectedMethod) return;
+
+        const goodsId = document.getElementById('goodsId').value;
+        const count = document.getElementById('buyCount').value;
+
+        // 先创建订单
+        fetch('/api/order/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: parseInt(document.getElementById('currentUserId').value) || 0,
+                goodsId: parseInt(goodsId),
+                count: parseInt(count)
+            })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                alert('下单失败：' + (data.message || '未知错误'));
+                return;
+            }
+            const order = data.data;
+            currentOrderId = order.id;
+
+            // 然后创建支付
+            return fetch('/api/payment/create', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    orderId: currentOrderId,
+                    method: selectedMethod
+                })
+            });
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (!data.success) {
+                alert('创建支付失败：' + (data.message || '未知错误'));
+                return;
+            }
+
+            // 切换到二维码界面
+            document.getElementById('stepSelectMethod').style.display = 'none';
+            document.getElementById('stepQrCode').style.display = 'block';
+
+            // 显示二维码
+            const methodLabel = selectedMethod === 'WECHAT' ? '微信支付' : '支付宝';
+            document.getElementById('payMethodLabel').textContent = '请使用「' + methodLabel + '」扫码支付';
+            document.getElementById('loadingOverlay').style.display = 'none';
+            document.getElementById('qrcodeImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data='
+                + encodeURIComponent(data.qrcode);
+
+            // 开始轮询
+            startPolling();
+        })
+        .catch(err => {
+            alert('出错了：' + err.message);
+        });
+    }
+
+    function startPolling() {
+        if (!currentOrderId) return;
+        document.getElementById('payStatusText').textContent = '等待扫码...';
+        pollTimer = setInterval(function() {
+            fetch('/api/payment/status/' + currentOrderId)
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'PAID') {
+                        stopPolling();
+                        document.getElementById('payStatusText').textContent = '✅ 支付成功！';
+                        document.getElementById('payStatusText').style.color = '#52c41a';
+                        setTimeout(function() {
+                            window.location.href = '/orders';
+                        }, 1500);
+                    } else if (data.status === 'CANCELLED') {
+                        stopPolling();
+                        document.getElementById('payStatusText').textContent = '❌ 订单已取消';
+                        document.getElementById('payStatusText').style.color = '#ff4d4f';
+                    }
+                })
+                .catch(function() {
+                    // 轮询出错，继续
+                });
+        }, 2000);
+    }
+
+    function stopPolling() {
+        if (pollTimer) {
+            clearInterval(pollTimer);
+            pollTimer = null;
+        }
+    }
+
+    function checkPaymentManually() {
+        if (!currentOrderId) return;
+        fetch('/api/payment/status/' + currentOrderId)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'PAID') {
+                    document.getElementById('payStatusText').textContent = '✅ 支付成功！';
+                    document.getElementById('payStatusText').style.color = '#52c41a';
+                    setTimeout(function() { window.location.href = '/orders'; }, 1000);
+                } else {
+                    document.getElementById('payStatusText').textContent = '⏳ 尚未支付，请扫码付款';
+                    document.getElementById('payStatusText').style.color = '#ff5f15';
+                }
+            });
+    }
+
+    function cancelPay() {
+        if (!currentOrderId) return;
+        stopPolling();
+        fetch('/api/payment/cancel/' + currentOrderId, { method: 'POST' })
+            .then(function() { closePayModal(); })
+            .catch(function() { closePayModal(); });
+    }
+
+    // 点遮罩关闭
     document.getElementById('payModal').addEventListener('click', function(e) {
         if (e.target === this) closePayModal();
     });
+
+    // 页面离开时停止轮询
+    window.addEventListener('beforeunload', function() { stopPolling(); });
 </script>
 
 </body>

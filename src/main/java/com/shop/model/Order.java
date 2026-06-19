@@ -27,12 +27,15 @@ public class Order {
     private Double totalPrice;    // 总价
 
     @Column(length = 20)
-    private String status;        // 状态：PAID / CANCELLED
+    private String status;        // 状态：UNPAID / PAID / CANCELLED
+
+    @Column(length = 20)
+    private String paymentMethod; // 支付方式：WECHAT / ALIPAY
 
     private LocalDateTime createdAt;
 
     @PrePersist
-    protected void onCreate() { createdAt = LocalDateTime.now(); status = "PAID"; }
+    protected void onCreate() { createdAt = LocalDateTime.now(); if (status == null) status = "UNPAID"; }
 
     // --- getter / setter ---
 
@@ -53,6 +56,9 @@ public class Order {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getPaymentMethod() { return paymentMethod; }
+    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
