@@ -454,12 +454,30 @@
                 return;
             }
 
-            // 切换到二维码界面
+            // === 支付宝：跳转到支付宝页面付款 ===
+            if (data.method === 'ALIPAY') {
+                document.getElementById('stepSelectMethod').style.display = 'none';
+                document.getElementById('stepQrCode').style.display = 'block';
+                document.getElementById('loadingOverlay').style.display = 'none';
+                document.getElementById('payMethodLabel').textContent = '正在跳转到支付宝...';
+                document.getElementById('qrcodeImg').style.display = 'none';
+                document.getElementById('payStatusArea').innerHTML =
+                    '<p style="color:#666;font-size:16px;">正在跳转到支付宝付款页面...</p>' +
+                    '<p style="color:#999;font-size:13px;margin-top:8px;">如果没有自动跳转，请点击下方按钮</p>';
+                var actions = document.querySelector('#stepQrCode .modal-actions');
+                actions.innerHTML =
+                    '<a href="' + data.redirectUrl + '" class="btn-buy" style="text-decoration:none;">前往支付宝付款 →</a>' +
+                    '<button type="button" class="btn-cancel" onclick="closePayModal()">取消</button>';
+                // 自动跳转
+                window.location.href = data.redirectUrl;
+                return;
+            }
+
+            // === 微信：显示二维码 + 轮询 ===
             document.getElementById('stepSelectMethod').style.display = 'none';
             document.getElementById('stepQrCode').style.display = 'block';
 
-            // 显示二维码
-            const methodLabel = selectedMethod === 'WECHAT' ? '微信支付' : '支付宝';
+            const methodLabel = '微信支付';
             document.getElementById('payMethodLabel').textContent = '请使用「' + methodLabel + '」扫码支付';
             document.getElementById('loadingOverlay').style.display = 'none';
             document.getElementById('qrcodeImg').src = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data='

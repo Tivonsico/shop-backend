@@ -61,34 +61,41 @@ public class PaymentController {
         }
 
         try {
-            String qrcode;
             if ("ALIPAY".equals(method)) {
-                // 支付宝支付（金额单位：元）
+                // 支付宝电脑网站支付
                 if (!alipayService.isConfigured()) {
                     return Map.of("success", false, "message", "支付宝未配置，请在环境变量中设置 ALIPAY_* 参数");
                 }
-                qrcode = alipayService.createOrder(orderId, order.getTotalPrice(),
+                String redirectUrl = alipayService.createPayPageUrl(orderId, order.getTotalPrice(),
                         "天方电竞-" + order.getGoodsId());
                 order.setPaymentMethod("ALIPAY");
+                orderService.save(order);
+
+                return Map.of(
+                        "success", true,
+                        "redirectUrl", redirectUrl,
+                        "method", "ALIPAY",
+                        "orderId", orderId
+                );
 
             } else {
-                // 微信支付（金额单位：分）
+                // 微信支付 Native 扫码（金额单位：分）
                 if (!wechatPayService.isConfigured()) {
                     return Map.of("success", false, "message", "微信支付未配置，请在环境变量中设置 WECHAT_* 参数");
                 }
                 int totalFee = (int) Math.round(order.getTotalPrice() * 100);
-                qrcode = wechatPayService.createOrder(orderId, totalFee,
+                String qrcode = wechatPayService.createOrder(orderId, totalFee,
                         "天方电竞-" + order.getGoodsId());
                 order.setPaymentMethod("WECHAT");
+                orderService.save(order);
+
+                return Map.of(
+                        "success", true,
+                        "qrcode", qrcode,
+                        "method", "WECHAT",
+                        "orderId", orderId
+                );
             }
-
-            orderService.save(order);
-
-            return Map.of(
-                    "success", true,
-                    "qrcode", qrcode,
-                    "orderId", orderId
-            );
 
         } catch (Exception e) {
             log.error("创建支付失败", e);
