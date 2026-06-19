@@ -2,9 +2,9 @@ package com.shop.service;
 
 import com.shop.model.PaymentRecord;
 import com.shop.repository.PaymentRepository;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URLEncoder;
@@ -17,14 +17,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
- * 支付宝电脑网站支付
+ * 支付宝电脑网站支付 —— 直接读环境变量，不依赖 Spring @Value
  *
  * 流程：
  *   用户选支付宝 → 后端生成签名 URL
  *   → 浏览器跳转到支付宝页面 → 用户输密码付款
  *   → 支付宝回调 notify_url（服务端）+ 跳回 return_url（浏览器）
- *
- * 不需要当面付能力，支付宝应用里开通「电脑网站支付」即可
  */
 @Service
 public class AlipayService {
@@ -35,43 +33,50 @@ public class AlipayService {
 
     private final PaymentRepository paymentRepository;
 
-    @Value("${alipay.app-id:}")
+    // 从 System.getenv() 直接读取，不走 Spring 属性链
     private String appId;
-
-    @Value("${alipay.app-private-key:}")
     private String appPrivateKey;
-
-    @Value("${alipay.alipay-public-key:}")
     private String alipayPublicKey;
-
-    @Value("${alipay.notify-url:}")
     private String notifyUrl;
-
-    @Value("${alipay.return-url:}")
     private String returnUrl;
-
-    @Value("${alipay.sandbox:true}")
     private boolean sandbox;
 
     public AlipayService(PaymentRepository paymentRepository) {
         this.paymentRepository = paymentRepository;
     }
 
+    @PostConstruct
+    public void init() {
+        // 从环境变量读取
+        this.appId = getEnv("ALIPAY_APP_ID");
+        this.appPrivateKey = getEnv("ALIPAY_APP_PRIVATE_KEY");
+        this.alipayPublicKey = getEnv("ALIPAY_PUBLIC_KEY");
+        this.notifyUrl = getEnv("ALIPAY_NOTIFY_URL");
+        this.returnUrl = getEnv("ALIPAY_RETURN_URL");
+        String sandboxStr = getEnv("ALIPAY_SANDBOX");
+        this.sandbox = !"false".equalsIgnoreCase(sandboxStr);
+
+        if (isConfigured()) {
+            log.info("支付宝支付已配置完成 ✓");
+        } else {
+            log.warn("支付宝支付未完全配置: appId={}, privateKey={}, publicKey={}",
+                    appId != null && !appId.isEmpty() ? "✓" : "✗",
+                    appPrivateKey != null && !appPrivateKey.isEmpty() ? "✓" : "✗",
+                    alipayPublicKey != null && !alipayPublicKey.isEmpty() ? "✓" : "✗");
+        }
+    }
+
     /** 是否配好了支付宝支付 */
     public boolean isConfigured() {
-        return !appId.isEmpty() && !appPrivateKey.isEmpty() && !alipayPublicKey.isEmpty();
+        return appId != null && !appId.isEmpty()
+                && appPrivateKey != null && !appPrivateKey.isEmpty()
+                && alipayPublicKey != null && !alipayPublicKey.isEmpty();
     }
 
     /**
      * 生成支付宝电脑网站支付跳转 URL
-     *
-     * @param orderId  订单 ID
-     * @param amount   金额，单位：元
-     * @param subject  订单标题（商品名）
-     * @return 支付页面 URL（浏览器直接跳转过去）
      */
     public String createPayPageUrl(Long orderId, Double amount, String subject) {
-        // 保存支付记录
         PaymentRecord record = new PaymentRecord();
         record.setOrderId(orderId);
         record.setMethod("ALIPAY");
@@ -86,7 +91,6 @@ public class AlipayService {
                     + "\"subject\":\"" + escapeJson(subject) + "\""
                     + "}";
 
-            // 构建公共参数（TreeMap 自动排序）
             Map<String, String> params = new TreeMap<>();
             params.put("app_id", appId);
             params.put("method", "alipay.trade.page.pay");
@@ -95,15 +99,13 @@ public class AlipayService {
             params.put("sign_type", "RSA2");
             params.put("timestamp", LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             params.put("version", "1.0");
-            params.put("return_url", returnUrl);
-            params.put("notify_url", notifyUrl);
+            params.put("notify_url", notifyUrl != null ? notifyUrl : "");
+            params.put("return_url", returnUrl != null ? returnUrl : "");
             params.put("biz_content", bizContent);
 
-            // 签名
             String signContent = buildSignContent(params);
             String sign = rsaSign(signContent);
 
-            // 构建跳转 URL
             String gateway = sandbox ? GATEWAY_SANDBOX : GATEWAY_PROD;
             StringBuilder url = new StringBuilder(gateway);
             for (Map.Entry<String, String> entry : params.entrySet()) {
@@ -115,16 +117,15 @@ public class AlipayService {
             url.append("&sign=").append(URLEncoder.encode(sign, "UTF-8"));
 
             String payUrl = url.toString();
-            log.info("Alipay page pay URL generated: orderId={}, amount={}", orderId, amount);
+            log.info("支付宝支付URL已生成: orderId={}, amount={}", orderId, amount);
 
-            // 记录 prepayId 存 URL
             record.setPrepayId(payUrl);
             paymentRepository.save(record);
 
             return payUrl;
 
         } catch (Exception e) {
-            log.error("Alipay create page pay failed", e);
+            log.error("支付宝下单失败", e);
             record.setStatus("CLOSED");
             record.setErrMsg(e.getMessage());
             paymentRepository.save(record);
@@ -154,7 +155,7 @@ public class AlipayService {
 
             return rsaVerify(content.toString(), sign);
         } catch (Exception e) {
-            log.error("Alipay verify failed", e);
+            log.error("支付宝验签失败", e);
             return false;
         }
     }
@@ -168,11 +169,11 @@ public class AlipayService {
             String outTradeNo = params.get("out_trade_no");
             String tradeNo = params.get("trade_no");
 
-            log.info("Alipay notify: outTradeNo={}, tradeStatus={}, tradeNo={}",
+            log.info("支付宝回调: outTradeNo={}, tradeStatus={}, tradeNo={}",
                     outTradeNo, tradeStatus, tradeNo);
 
             if (!"TRADE_SUCCESS".equals(tradeStatus) && !"TRADE_FINISHED".equals(tradeStatus)) {
-                log.warn("Alipay trade not success: {}", tradeStatus);
+                log.warn("支付宝交易未成功: {}", tradeStatus);
                 return null;
             }
             if (outTradeNo == null) return null;
@@ -181,7 +182,7 @@ public class AlipayService {
 
             PaymentRecord record = paymentRepository.findByOrderId(orderId).orElse(null);
             if (record == null) {
-                log.warn("Payment record not found for order: {}", orderId);
+                log.warn("支付记录不存在: {}", orderId);
                 return null;
             }
 
@@ -194,14 +195,22 @@ public class AlipayService {
             return orderId;
 
         } catch (Exception e) {
-            log.error("Alipay notify handle failed", e);
+            log.error("支付宝回调处理失败", e);
             return null;
         }
     }
 
     // =================== 私有方法 ===================
 
-    /** 构建待签名字符串 */
+    private String getEnv(String name) {
+        String val = System.getenv(name);
+        if (val == null || val.trim().isEmpty()) {
+            // 也试试小写版本（Spring Boot 有时会设小写）
+            val = System.getenv(name.toLowerCase());
+        }
+        return val != null ? val.trim() : "";
+    }
+
     private String buildSignContent(Map<String, String> sortedParams) {
         StringBuilder content = new StringBuilder();
         for (Map.Entry<String, String> entry : sortedParams.entrySet()) {
@@ -216,7 +225,6 @@ public class AlipayService {
         return content.toString();
     }
 
-    /** RSA2 签名 */
     private String rsaSign(String content) {
         try {
             String key = appPrivateKey
@@ -239,7 +247,6 @@ public class AlipayService {
         }
     }
 
-    /** 验证 RSA2 签名 */
     private boolean rsaVerify(String content, String sign) {
         try {
             String key = alipayPublicKey
