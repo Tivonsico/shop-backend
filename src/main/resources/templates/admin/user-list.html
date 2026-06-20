@@ -66,7 +66,7 @@
                     <td th:text="${user.username}" style="font-weight: 500;">用户名</td>
                     <td th:text="${user.phone != null ? user.phone : '-'}">138xxxx</td>
                     <td>
-                        ¥<span th:text="${#numbers.formatDecimal(orderService.getUserTotalSpent(user.id), 0, 2)}">0.00</span>
+                        ¥<span th:text="${#numbers.formatDecimal(orderService.getUserTotalSpent(user.id), 1, 2)}">0.00</span>
                     </td>
                     <td style="font-size: 13px; color: #999;" th:text="${user.createdAt}">时间</td>
                 </tr>

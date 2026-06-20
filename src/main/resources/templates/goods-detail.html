@@ -171,7 +171,7 @@
         <div class="goods-detail-info">
             <h2 th:text="${goods.name}">商品名称</h2>
             <p class="desc" th:text="${goods.description}">商品描述</p>
-            <div class="price-big" th:text="${#numbers.formatDecimal(goods.price, 0, 2)}">99.00</div>
+            <div class="price-big" th:text="${#numbers.formatDecimal(goods.price, 1, 2)}">99.00</div>
             <div class="stock">库存：<span th:text="${goods.stock}">0</span> 件</div>
 
             <!-- 错误提示 -->

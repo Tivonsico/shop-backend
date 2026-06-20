@@ -142,7 +142,7 @@
                 <h3 th:text="${goods.name}">商品名称</h3>
                 <p th:text="${goods.description}">商品描述</p>
                 <div class="goods-card-footer">
-                    <span class="price" th:text="${#numbers.formatDecimal(goods.price, 0, 2)}">99.00</span>
+                    <span class="price" th:text="${#numbers.formatDecimal(goods.price, 1, 2)}">99.00</span>
                     <a class="btn-link" th:href="@{/goods/{id}(id=${goods.id})}">查看详情</a>
                 </div>
             </div>

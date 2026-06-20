@@ -44,7 +44,7 @@
                     <p>
                         数量：<span th:text="${order.count}">1</span>
                         ｜
-                        总价：¥<span th:text="${#numbers.formatDecimal(order.totalPrice, 0, 2)}">99.00</span>
+                        总价：¥<span th:text="${#numbers.formatDecimal(order.totalPrice, 1, 2)}">99.00</span>
                     </p>
                     <p style="font-size: 12px; color: #bbb;" th:text="${order.createdAt}">时间</p>
                 </div>

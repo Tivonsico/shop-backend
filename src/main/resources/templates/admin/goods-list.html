@@ -69,7 +69,7 @@
                 <tr th:each="goods : ${goodsList}">
                     <td><img th:src="${goods.imageUrl}" th:alt="${goods.name}"></td>
                     <td th:text="${goods.name}" style="font-weight: 500;">商品名</td>
-                    <td>¥<span th:text="${#numbers.formatDecimal(goods.price, 0, 2)}">99.00</span></td>
+                    <td>¥<span th:text="${#numbers.formatDecimal(goods.price, 1, 2)}">99.00</span></td>
                     <td>
                         <span th:text="${goods.stock}" th:classappend="${goods.stock < 10 ? 'stock-low' : ''}">100</span>
                     </td>

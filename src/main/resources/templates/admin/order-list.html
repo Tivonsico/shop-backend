@@ -72,7 +72,7 @@
                         </div>
                     </td>
                     <td th:text="${order.count}">1</td>
-                    <td>¥<span th:text="${#numbers.formatDecimal(order.totalPrice, 0, 2)}">99.00</span></td>
+                    <td>¥<span th:text="${#numbers.formatDecimal(order.totalPrice, 1, 2)}">99.00</span></td>
                     <td th:text="${order.userId}">1</td>
                     <td>
                         <span class="status-badge status-paid" th:text="${order.status == 'PAID' ? '已支付' : order.status}">已支付</span>
