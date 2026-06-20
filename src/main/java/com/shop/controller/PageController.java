@@ -28,7 +28,9 @@ public class PageController {
     }
 
     @GetMapping("/")
-    public String index(Model model) {
+    public String index(Model model, HttpSession session) {
+        // 标记该浏览器访问过首页（管理员登录需要此标记）
+        session.setAttribute("siteAccess", true);
         List<Goods> goodsList = goodsService.getAllGoods();
         model.addAttribute("goodsList", goodsList);
         return "index";

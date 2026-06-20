@@ -40,6 +40,10 @@ public class AdminController {
 
     @GetMapping("/login")
     public String loginPage(HttpSession session, Model model) {
+        // 只有访问过首页（有 siteAccess 标记）的浏览器才能看到管理员登录页
+        if (session.getAttribute("siteAccess") == null) {
+            return "redirect:/";
+        }
         Object error = session.getAttribute("adminError");
         if (error != null) {
             model.addAttribute("error", error);
