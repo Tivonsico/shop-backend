@@ -214,9 +214,9 @@
                 ｜ 数量：<span id="payCount">1</span>
             </div>
 
-            <!-- 微信收款码（正式支付上线前先用这个） -->
+            <!-- 微信收款码 -->
             <div style="margin:16px 0;padding:16px;background:#fafafa;border-radius:12px;border:1px solid #eee;">
-                <p style="font-size:14px;font-weight:600;margin-bottom:12px;color:#333;">📱 请先使用扫码支付</p>
+                <p style="font-size:14px;font-weight:600;margin-bottom:12px;color:#333;">📱 也可直接扫码付款</p>
                 <img src="/uploads/wechat-pay.jpg"
                      style="width:200px;height:200px;object-fit:contain;display:block;margin:0 auto 12px;border-radius:8px;"
                      onerror="this.style.display='none'">
@@ -228,25 +228,20 @@
             <p style="font-size:14px;color:#999;margin-bottom:12px;">选择支付方式</p>
 
             <div class="pay-method-list">
-                <label class="pay-method-item" onclick="selectMethod('WECHAT')" id="methodWechat" style="opacity:0.5;cursor:not-allowed;">
+                <label class="pay-method-item" onclick="selectMethod('WECHAT')" id="methodWechat">
                     <span style="font-size:24px;margin-right:8px;">💚</span>
-                    <span>微信支付 <small style="color:#ff5f15;">(测试中)</small></span>
+                    <span>微信支付</span>
                     <span class="pay-check" id="checkWechat"></span>
                 </label>
-                <label class="pay-method-item" onclick="selectMethod('ALIPAY')" id="methodAlipay" style="opacity:0.5;cursor:not-allowed;">
+                <label class="pay-method-item" onclick="selectMethod('ALIPAY')" id="methodAlipay">
                     <span style="font-size:24px;margin-right:8px;">💙</span>
-                    <span>支付宝 <small style="color:#ff5f15;">(测试中)</small></span>
+                    <span>支付宝</span>
                     <span class="pay-check" id="checkAlipay"></span>
                 </label>
             </div>
 
-            <p style="font-size:12px;color:#bbb;text-align:center;margin-top:12px;">
-                微信支付和支付宝功能还在测试中，暂时无法使用。<br>
-                请先使用微信扫码支付，联系客服完成订单。
-            </p>
-
-            <div class="modal-actions" style="margin-top:16px;">
-                <button type="button" class="btn-buy" onclick="alert('支付功能正在测试中，请先使用微信扫码付款并联系客服')" id="btnConfirmPay">
+            <div class="modal-actions" style="margin-top:20px;">
+                <button type="button" class="btn-buy" onclick="confirmPay()" id="btnConfirmPay" disabled>
                     确认支付
                 </button>
                 <button type="button" class="btn-cancel" onclick="closePayModal()">取消</button>
