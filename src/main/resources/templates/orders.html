@@ -13,6 +13,8 @@
         .order-card-right .status-cancelled { color: #999; }
         .btn-pay-now { display: inline-block; background: #ff5f15; color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 13px; text-decoration: none; font-weight: 600; transition: background 0.2s; }
         .btn-pay-now:hover { background: #e55010; }
+        .btn-cancel-order { display: inline-block; background: #f5f5f5; color: #999; border: 1px solid #e8e8e8; padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; margin-top: 6px; }
+        .btn-cancel-order:hover { background: #fff1f0; color: #ff4d4f; border-color: #ff4d4f; }
     </style>
 </head>
 <body>
@@ -36,7 +38,6 @@
     <div class="order-list" th:if="${!#lists.isEmpty(orderList)}">
         <div class="order-card" th:each="order : ${orderList}">
             <div class="order-card-left">
-                <!-- 通过 goodsService 查商品信息 -->
                 <img th:src="${goodsService.findById(order.goodsId).get().imageUrl}"
                      th:alt="${goodsService.findById(order.goodsId).get().name}">
                 <div class="order-info">
@@ -55,6 +56,8 @@
                       th:text="${order.status == 'UNPAID' ? '未支付' : (order.status == 'PAID' ? '已支付' : '已取消')}">已支付</span>
                 <a th:if="${order.status == 'UNPAID'}" th:href="@{/goods/{id}(id=${order.goodsId})}"
                    class="btn-pay-now">去支付 →</a>
+                <button th:if="${order.status == 'UNPAID'}" class="btn-cancel-order"
+                        th:onclick="'cancelOrder(' + ${order.id} + ')'">取消订单</button>
             </div>
         </div>
     </div>
@@ -65,6 +68,24 @@
         <p style="margin-top: 12px;"><a href="/" style="color: #ff5f15;">去逛逛</a></p>
     </div>
 </div>
+
+<script>
+    function cancelOrder(orderId) {
+        if (!confirm('确定要取消该订单吗？')) return;
+        fetch('/api/payment/cancel/' + orderId, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    location.reload();
+                } else {
+                    alert(data.message || '取消失败');
+                }
+            })
+            .catch(function() {
+                alert('取消失败，请联系客服');
+            });
+    }
+</script>
 
 </body>
 </html>

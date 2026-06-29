@@ -425,6 +425,11 @@
 
     function confirmPay() {
         if (!selectedMethod) return;
+        // 防止重复点击
+        var btn = document.getElementById('btnConfirmPay');
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.textContent = '处理中...';
 
         const goodsId = document.getElementById('goodsId').value;
         const count = document.getElementById('buyCount').value;
@@ -499,6 +504,9 @@
         })
         .catch(err => {
             alert('出错了：' + err.message);
+            // 恢复按钮
+            document.getElementById('btnConfirmPay').disabled = false;
+            document.getElementById('btnConfirmPay').textContent = '确认支付';
         });
     }
 
