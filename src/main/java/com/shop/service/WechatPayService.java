@@ -80,6 +80,9 @@ public class WechatPayService {
      * @return code_url（前端用它生成二维码）
      */
     public String createOrder(Long orderId, Integer totalFee, String description) {
+        // 删除已存在的支付记录（避免重复）
+        paymentRepository.findByOrderId(orderId).ifPresent(record -> paymentRepository.delete(record));
+
         // 保存支付记录
         PaymentRecord record = new PaymentRecord();
         record.setOrderId(orderId);
@@ -93,11 +96,23 @@ public class WechatPayService {
             HttpEntity<String> request = new HttpEntity<>(body, headers);
 
             log.info("WeChat Pay request: orderId={}, totalFee={}", orderId, totalFee);
-            ResponseEntity<String> response = restTemplate.exchange(
-                    API_URL, HttpMethod.POST, request, String.class);
+            log.info("WeChat Pay request body: {}", body);
+            log.info("WeChat Pay auth header: {}", headers.getFirst("Authorization"));
+
+            ResponseEntity<String> response;
+            try {
+                response = restTemplate.exchange(
+                        API_URL, HttpMethod.POST, request, String.class);
+            } catch (org.springframework.web.client.HttpClientErrorException e) {
+                log.error("WeChat Pay HTTP error: status={}, responseBody={}",
+                        e.getStatusCode(), e.getResponseBodyAsString());
+                log.error("WeChat Pay request that failed - body: {}, auth: {}",
+                        body, headers.getFirst("Authorization"));
+                throw new RuntimeException("微信支付下单失败: " + e.getStatusCode() + " - " + e.getResponseBodyAsString());
+            }
 
             String respBody = response.getBody();
-            log.info("WeChat Pay response: {}", respBody);
+            log.info("WeChat Pay response status: {}, body: {}", response.getStatusCode(), respBody);
 
             // 解析 code_url
             String codeUrl = extractJsonValue(respBody, "code_url");
@@ -149,16 +164,20 @@ public class WechatPayService {
             String plaintext = decryptAesGcm(ciphertext, nonce, associatedData != null ? associatedData : "");
             log.info("WeChat notify plaintext: {}", plaintext);
 
-            // 2. 从明文中解析 out_trade_no（即我们的 orderId）
+            // 2. 从明文中解析 out_trade_no（去掉 "TF" 前缀得到 orderId）
             String outTradeNo = extractJsonValue(plaintext, "out_trade_no");
             String tradeState = extractJsonValue(plaintext, "trade_state");
-            String tradeNo = extractJsonValue(plaintext, "transaction_id");
+            String wechatTradeNo = extractJsonValue(plaintext, "transaction_id");
 
             if (outTradeNo == null || !"SUCCESS".equals(tradeState)) {
                 log.warn("WeChat pay not success: tradeState={}", tradeState);
                 return null;
             }
 
+            // 移除 "TF" 前缀得到原始 orderId
+            if (outTradeNo.startsWith("TF")) {
+                outTradeNo = outTradeNo.substring(2);
+            }
             Long orderId = Long.parseLong(outTradeNo);
 
             // 3. 更新支付记录
@@ -169,7 +188,7 @@ public class WechatPayService {
             }
 
             record.setStatus("PAID");
-            record.setTradeNo(tradeNo);
+            record.setTradeNo(wechatTradeNo);
             record.setNotifyRaw(body);
             record.setPaidAt(LocalDateTime.now());
             paymentRepository.save(record);
@@ -186,11 +205,13 @@ public class WechatPayService {
 
     /** 构建请求体 JSON */
     private String buildRequestBody(Long orderId, Integer totalFee, String description) {
+        // 微信要求 out_trade_no 必须6-32个字符，不能全数字，加前缀补齐
+        String tradeNo = "TF" + String.format("%06d", orderId);
         return "{"
                 + "\"appid\":\"" + escapeJson(appId) + "\","
                 + "\"mchid\":\"" + escapeJson(mchId) + "\","
                 + "\"description\":\"" + escapeJson(description) + "\","
-                + "\"out_trade_no\":\"" + orderId + "\","
+                + "\"out_trade_no\":\"" + tradeNo + "\","
                 + "\"notify_url\":\"" + escapeJson(notifyUrl) + "\","
                 + "\"amount\":{\"total\":" + totalFee + ",\"currency\":\"CNY\"}"
                 + "}";

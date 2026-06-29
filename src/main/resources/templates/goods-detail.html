@@ -537,17 +537,33 @@
 
     function checkPaymentManually() {
         if (!currentOrderId) return;
-        fetch('/api/payment/status/' + currentOrderId)
+        // 先调手动确认接口（如果微信回调已经处理了也能正常返回）
+        fetch('/api/payment/confirm/' + currentOrderId, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
-                if (data.status === 'PAID') {
+                if (data.success) {
                     document.getElementById('payStatusText').textContent = '✅ 支付成功！';
                     document.getElementById('payStatusText').style.color = '#52c41a';
                     setTimeout(function() { window.location.href = '/orders'; }, 1000);
                 } else {
-                    document.getElementById('payStatusText').textContent = '⏳ 尚未支付，请扫码付款';
-                    document.getElementById('payStatusText').style.color = '#ff5f15';
+                    // 确认失败，查一下实际状态
+                    return fetch('/api/payment/status/' + currentOrderId)
+                        .then(r => r.json())
+                        .then(statusData => {
+                            if (statusData.status === 'PAID') {
+                                document.getElementById('payStatusText').textContent = '✅ 支付成功！';
+                                document.getElementById('payStatusText').style.color = '#52c41a';
+                                setTimeout(function() { window.location.href = '/orders'; }, 1000);
+                            } else {
+                                document.getElementById('payStatusText').textContent = '⏳ 尚未支付，请扫码付款或联系客服';
+                                document.getElementById('payStatusText').style.color = '#ff5f15';
+                            }
+                        });
                 }
+            })
+            .catch(function() {
+                document.getElementById('payStatusText').textContent = '❌ 查询失败，联系客服处理';
+                document.getElementById('payStatusText').style.color = '#ff4d4f';
             });
     }
 

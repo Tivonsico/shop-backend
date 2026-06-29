@@ -1,6 +1,7 @@
 package com.shop.config;
 
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.PathMatchConfigurer;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
@@ -17,5 +18,11 @@ public class WebConfig implements WebMvcConfigurer {
         String uploadDir = System.getProperty("user.dir") + "/uploads/";
         registry.addResourceHandler("/uploads/**")
                 .addResourceLocations("file:" + uploadDir, "classpath:/static/uploads/");
+    }
+
+    @Override
+    public void configurePathMatch(PathMatchConfigurer configurer) {
+        // 开启末尾斜杠匹配，让 /api/payment/notify/wechat/ 和 /api/payment/notify/wechat 都能访问
+        configurer.setUseTrailingSlashMatch(true);
     }
 }

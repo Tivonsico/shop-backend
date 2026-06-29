@@ -77,6 +77,9 @@ public class AlipayService {
      * 生成支付宝电脑网站支付跳转 URL
      */
     public String createPayPageUrl(Long orderId, Double amount, String subject) {
+        // 删除已存在的支付记录（避免重复）
+        paymentRepository.findByOrderId(orderId).ifPresent(record -> paymentRepository.delete(record));
+
         PaymentRecord record = new PaymentRecord();
         record.setOrderId(orderId);
         record.setMethod("ALIPAY");

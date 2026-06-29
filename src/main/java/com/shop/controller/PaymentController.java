@@ -104,6 +104,22 @@ public class PaymentController {
     }
 
     /**
+     * 手动确认支付（用户点击"已完成支付"时调用）
+     *
+     * POST /api/payment/confirm/{orderId}
+     *
+     * @return { "success": true, "status": "PAID" }
+     */
+    @PostMapping("/confirm/{orderId}")
+    public Map<String, Object> confirmPayment(@PathVariable Long orderId) {
+        boolean ok = orderService.confirmPayment(orderId);
+        if (ok) {
+            return Map.of("success", true, "status", "PAID");
+        }
+        return Map.of("success", false, "message", "确认失败，订单不存在或已支付/已取消");
+    }
+
+    /**
      * 轮询查询支付状态
      *
      * GET /api/payment/status/{orderId}
@@ -131,7 +147,7 @@ public class PaymentController {
      * 微信支付回调
      * 微信服务器会 POST 到这个地址
      */
-    @PostMapping("/notify/wechat")
+    @PostMapping({"/notify/wechat", "/notify/wechat/"})
     public Object wechatNotify(HttpServletRequest request, HttpServletResponse response) {
         try {
             // 读取请求体
@@ -187,7 +203,7 @@ public class PaymentController {
      * 支付宝支付回调
      * 支付宝服务器会 POST 到这个地址
      */
-    @PostMapping("/notify/alipay")
+    @PostMapping({"/notify/alipay", "/notify/alipay/"})
     public Object alipayNotify(HttpServletRequest request, HttpServletResponse response) {
         try {
             // 提取支付宝回调参数
