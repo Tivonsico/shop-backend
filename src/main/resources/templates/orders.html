@@ -13,8 +13,35 @@
         .order-card-right .status-cancelled { color: #999; }
         .btn-pay-now { display: inline-block; background: #ff5f15; color: #fff; padding: 6px 16px; border-radius: 6px; font-size: 13px; text-decoration: none; font-weight: 600; transition: background 0.2s; }
         .btn-pay-now:hover { background: #e55010; }
-        .btn-cancel-order { display: inline-block; background: #f5f5f5; color: #999; border: 1px solid #e8e8e8; padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; margin-top: 6px; }
+        .btn-cancel-order { display: inline-block; background: #f5f5f5; color: #999; border: 1px solid #e8e8e8; padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
         .btn-cancel-order:hover { background: #fff1f0; color: #ff4d4f; border-color: #ff4d4f; }
+        .btn-link { display: inline-block; background: #f5f5f5; color: #666; border: 1px solid #e8e8e8; padding: 5px 14px; border-radius: 6px; font-size: 12px; text-decoration: none; transition: all 0.2s; }
+        .btn-link:hover { background: #f0f0f0; color: #ff5f15; border-color: #ddd; }
+        .btn-contact { display: inline-block; background: #e6f7ff; color: #1890ff; border: 1px solid #91d5ff; padding: 5px 14px; border-radius: 6px; font-size: 12px; cursor: pointer; transition: all 0.2s; }
+        .btn-contact:hover { background: #bae7ff; color: #096dd9; }
+        .contact-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            justify-content: center;
+            align-items: center;
+        }
+        .contact-overlay.show { display: flex; }
+        .contact-box {
+            background: #fff;
+            border-radius: 16px;
+            padding: 40px;
+            width: 360px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: modalIn 0.3s ease;
+        }
+        @keyframes modalIn {
+            from { transform: scale(0.9); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
@@ -34,20 +61,26 @@
 <div class="container">
     <h2 class="page-title">我的订单</h2>
 
-    <!-- 有订单时 -->
     <div class="order-list" th:if="${!#lists.isEmpty(orderList)}">
         <div class="order-card" th:each="order : ${orderList}">
             <div class="order-card-left">
                 <img th:src="${goodsService.findById(order.goodsId).get().imageUrl}"
                      th:alt="${goodsService.findById(order.goodsId).get().name}">
                 <div class="order-info">
-                    <h4 th:text="${goodsService.findById(order.goodsId).get().name}">商品名称</h4>
+                    <h4>
+                        <span th:text="${goodsService.findById(order.goodsId).get().name}">商品名称</span>
+                        <span style="font-size:12px;color:#999;margin-left:8px;">#<span th:text="${order.id}">1</span></span>
+                    </h4>
                     <p>
                         数量：<span th:text="${order.count}">1</span>
                         ｜
                         总价：¥<span th:text="${#numbers.formatDecimal(order.totalPrice, 1, 2)}">99.00</span>
                     </p>
                     <p style="font-size: 12px; color: #bbb;" th:text="${order.createdAt}">时间</p>
+                    <div style="margin-top:8px;display:flex;gap:8px;">
+                        <a th:href="@{/goods/{id}(id=${order.goodsId})}" class="btn-link">商品详情 →</a>
+                        <a th:if="${order.status != 'CANCELLED'}" href="javascript:void(0)" class="btn-contact" th:onclick="'showContact(' + ${order.id} + ')'">📦 联系发货</a>
+                    </div>
                 </div>
             </div>
             <div class="order-card-right">
@@ -62,10 +95,24 @@
         </div>
     </div>
 
-    <!-- 没有订单时 -->
     <div class="empty-state" th:if="${#lists.isEmpty(orderList)}">
         <p>暂无订单</p>
         <p style="margin-top: 12px;"><a href="/" style="color: #ff5f15;">去逛逛</a></p>
+    </div>
+</div>
+
+<div class="contact-overlay" id="contactModal">
+    <div class="contact-box">
+        <div style="font-size:48px;margin-bottom:12px;">📦</div>
+        <h3 style="margin-bottom:8px;">联系发货</h3>
+        <p style="font-size:13px;color:#666;margin-bottom:20px;">请添加微信客服，提供订单号快速发货</p>
+        <div style="background:#fafafa;border-radius:12px;padding:20px;margin-bottom:16px;border:1px solid #eee;">
+            <p style="font-size:13px;color:#999;margin-bottom:6px;">订单号：<span id="contactOrderId" style="color:#333;font-weight:600;"></span></p>
+            <p style="font-size:14px;color:#333;font-weight:600;margin-bottom:6px;">微信客服</p>
+            <p style="font-size:28px;color:#ff5f15;font-weight:700;letter-spacing:2px;">15251889707</p>
+            <p style="font-size:12px;color:#999;margin-top:6px;">添加时备注订单号，方便快速处理</p>
+        </div>
+        <button type="button" class="btn-cancel" onclick="closeContact()" style="padding:10px 40px;">关闭</button>
     </div>
 </div>
 
@@ -75,16 +122,24 @@
         fetch('/api/payment/cancel/' + orderId, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
-                if (data.success) {
-                    location.reload();
-                } else {
-                    alert(data.message || '取消失败');
-                }
+                if (data.success) { location.reload(); }
+                else { alert(data.message || '取消失败'); }
             })
-            .catch(function() {
-                alert('取消失败，请联系客服');
-            });
+            .catch(function() { alert('取消失败，请联系客服'); });
     }
+
+    function showContact(orderId) {
+        document.getElementById('contactOrderId').textContent = orderId;
+        document.getElementById('contactModal').classList.add('show');
+    }
+
+    function closeContact() {
+        document.getElementById('contactModal').classList.remove('show');
+    }
+
+    document.getElementById('contactModal').addEventListener('click', function(e) {
+        if (e.target === this) closeContact();
+    });
 </script>
 
 </body>
