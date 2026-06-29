@@ -276,6 +276,25 @@
                 <button type="button" class="btn-cancel" onclick="cancelPay()">取消订单</button>
             </div>
         </div>
+
+        <!-- === 第三步：支付成功卡片 === -->
+        <div id="stepSuccess" style="display:none;">
+            <div style="text-align:center;padding:20px 0;">
+                <div style="font-size:64px;margin-bottom:16px;">🎉</div>
+                <h3 style="font-size:22px;color:#52c41a;margin-bottom:8px;">支付成功！</h3>
+                <p style="font-size:14px;color:#666;margin-bottom:20px;">
+                    感谢您的购买，我们会尽快处理订单
+                </p>
+                <div style="background:#fafafa;border-radius:12px;padding:16px;margin-bottom:20px;border:1px solid #eee;">
+                    <p style="font-size:14px;color:#333;font-weight:600;margin-bottom:8px;">📦 发货联系微信</p>
+                    <p style="font-size:24px;color:#ff5f15;font-weight:700;">15251889707</p>
+                    <p style="font-size:12px;color:#999;margin-top:6px;">添加微信时请备注订单号，方便快速发货</p>
+                </div>
+                <a href="/orders" class="btn-buy" style="text-decoration:none;display:inline-block;padding:12px 40px;">
+                    查看订单 →
+                </a>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -519,20 +538,14 @@
                 .then(data => {
                     if (data.status === 'PAID') {
                         stopPolling();
-                        document.getElementById('payStatusText').textContent = '✅ 支付成功！';
-                        document.getElementById('payStatusText').style.color = '#52c41a';
-                        setTimeout(function() {
-                            window.location.href = '/orders';
-                        }, 1500);
+                        showPaySuccess();
                     } else if (data.status === 'CANCELLED') {
                         stopPolling();
                         document.getElementById('payStatusText').textContent = '❌ 订单已取消';
                         document.getElementById('payStatusText').style.color = '#ff4d4f';
                     }
                 })
-                .catch(function() {
-                    // 轮询出错，继续
-                });
+                .catch(function() {});
         }, 2000);
     }
 
@@ -543,28 +556,36 @@
         }
     }
 
+    function showPaySuccess() {
+        stopPolling();
+        document.getElementById('stepQrCode').style.display = 'none';
+        document.getElementById('stepSuccess').style.display = 'block';
+    }
+
     function checkPaymentManually() {
         if (!currentOrderId) return;
-        // 先调手动确认接口（如果微信回调已经处理了也能正常返回）
+        var btn = document.getElementById('btnCheckPay');
+        btn.disabled = true;
+        btn.textContent = '正在检查支付状态...';
+        document.getElementById('payStatusText').textContent = '正在检查支付状态...';
+        document.getElementById('payStatusText').style.color = '#999';
+
         fetch('/api/payment/confirm/' + currentOrderId, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
                 if (data.success) {
-                    document.getElementById('payStatusText').textContent = '✅ 支付成功！';
-                    document.getElementById('payStatusText').style.color = '#52c41a';
-                    setTimeout(function() { window.location.href = '/orders'; }, 1000);
+                    showPaySuccess();
                 } else {
-                    // 确认失败，查一下实际状态
                     return fetch('/api/payment/status/' + currentOrderId)
                         .then(r => r.json())
                         .then(statusData => {
                             if (statusData.status === 'PAID') {
-                                document.getElementById('payStatusText').textContent = '✅ 支付成功！';
-                                document.getElementById('payStatusText').style.color = '#52c41a';
-                                setTimeout(function() { window.location.href = '/orders'; }, 1000);
+                                showPaySuccess();
                             } else {
                                 document.getElementById('payStatusText').textContent = '⏳ 尚未支付，请扫码付款或联系客服';
                                 document.getElementById('payStatusText').style.color = '#ff5f15';
+                                btn.disabled = false;
+                                btn.textContent = '已完成支付 ✓';
                             }
                         });
                 }
@@ -572,6 +593,8 @@
             .catch(function() {
                 document.getElementById('payStatusText').textContent = '❌ 查询失败，联系客服处理';
                 document.getElementById('payStatusText').style.color = '#ff4d4f';
+                btn.disabled = false;
+                btn.textContent = '已完成支付 ✓';
             });
     }
 
